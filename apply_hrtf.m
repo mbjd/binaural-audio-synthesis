@@ -321,8 +321,70 @@ function imshow_interpolation(l_eq_hrir_S, r_eq_hrir_S, irs_and_delaydiffs, firs
 	subplot(326)
 	axis('tight', [0 ir_length 0 360]);
 	imagesc(image_right, [-1 1]);
-
 endfunction
+
+
+function imshow_interpolation_dft(l_eq_hrir_S, r_eq_hrir_S, irs_and_delaydiffs, first, last, steps)
+	% simple linear interpolation
+	image_left  = [];
+	image_right = [];
+	for index=linspace(first, last, steps)
+		disp(index);
+		fflush(stdout);
+		impulse_resps = interpolate_impulse_response_simple(l_eq_hrir_S, r_eq_hrir_S, index);
+		impulse_resps = interpolate_impulse_response_simple(l_eq_hrir_S, r_eq_hrir_S, index);
+		ir_left = abs(fft(impulse_resps(:, 1)))(1:256);
+		ir_right = abs(fft(impulse_resps(:, 2)))(1:256);
+		image_left = [image_left; ir_left'];
+		image_right = [image_right; ir_right'];
+	endfor
+	subplot(321)
+	axis('tight');
+	imagesc(image_left, [-1 1]);
+	subplot(322)
+	axis('tight');
+	imagesc(image_right, [-1 1]);
+
+	% fancy delay compensated interpolation
+	image_left  = [];
+	image_right = [];
+	for index=linspace(first, last, steps)
+		disp(index);
+		fflush(stdout);
+		impulse_resps = delay_compensated_interpolation(l_eq_hrir_S, r_eq_hrir_S, index);
+		ir_left = abs(fft(impulse_resps(:, 1)))(1:256);
+		ir_right = abs(fft(impulse_resps(:, 2)))(1:256);
+		image_left = [image_left; ir_left'];
+		image_right = [image_right; ir_right'];
+	endfor
+	subplot(323)
+	axis('tight');
+	imagesc(image_left, [-1 1]);
+	subplot(324)
+	axis('tight');
+	imagesc(image_right, [-1 1]);
+
+
+	% delay compensated interpolation with precalculated upsamplings and delays
+	image_left  = [];
+	image_right = [];
+	for index=linspace(first, last, steps)
+		disp(index);
+		fflush(stdout);
+		impulse_resps = delay_compensated_interpolation_efficient(irs_and_delaydiffs, index);
+		ir_left = abs(fft(impulse_resps(:, 1)))(1:256);
+		ir_right = abs(fft(impulse_resps(:, 2)))(1:256);
+		image_left = [image_left; ir_left'];
+		image_right = [image_right; ir_right'];
+	endfor
+	subplot(325)
+	axis('tight');
+	imagesc(image_left, [-1 1]);
+	subplot(326)
+	axis('tight');
+	imagesc(image_right, [-1 1]);
+endfunction
+
 
 % plot HRTFs successively in the time domain
 function plot_hrtf_impulse(l_eq_hrir_S, r_eq_hrir_S, start_index, end_index, pause_s)
