@@ -1,3 +1,4 @@
 *
 !apply_hrtf.m
+!upsample_irs.m
 !.gitignore
