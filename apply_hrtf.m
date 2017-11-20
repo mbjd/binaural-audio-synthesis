@@ -1,5 +1,7 @@
 % experiments with applying a HRTF to a (mono) audio signal
 
+% INPUT ETC.
+% {{{
 pkg load signal
 
 % read an input signal
@@ -16,35 +18,10 @@ load recherche.ircam.fr/COMPENSATED/MAT/HRIR/IRC_1032_C_HRIR.mat
 % TODO handle different sampling rates
 assert (l_eq_hrir_S.sampling_hz == FS);
 assert (r_eq_hrir_S.sampling_hz == FS);
+% }}}
 
-% plot HRTFs successively in the time domain
-function plot_hrtf_impulse(l_eq_hrir_S, r_eq_hrir_S, start_index, end_index, pause_s)
-	for i=(start_index:end_index)
-		disp(strcat(
-			'azim= ', num2str(l_eq_hrir_S.azim_v(i)),
-			', elev=', num2str(l_eq_hrir_S.elev_v(i))
-		));
-		fflush(stdout);
-		responses = [[l_eq_hrir_S.content_m(i,:)' + 1], r_eq_hrir_S.content_m(i,:)'];
-		plot([[2.5 -1.5]; responses]);
-		pause(pause_s)
-	endfor
-endfunction
-
-% plot HRTFs successively in the frequency domain
-function plot_hrtf_freq(l_eq_hrir_S, r_eq_hrir_S, start_index, end_index, pause_s)
-	for i=(start_index:end_index)
-		disp(strcat(
-			'azim= ', num2str(l_eq_hrir_S.azim_v(i)),
-			', elev=', num2str(l_eq_hrir_S.elev_v(i))
-		));
-		fflush(stdout);
-		responses = log(abs([[fft(l_eq_hrir_S.content_m(i,:)')], fft(r_eq_hrir_S.content_m(i,:)')])((1:256),:));
-		plot([responses]);
-		pause(pause_s)
-	endfor
-endfunction
-
+% BASIC HRTF STUFF
+% {{{
 
 % TODO separate the functions for finding the HRTF for an angle
 % and convolving it with the signal, to make it easier to interpolate later
@@ -82,27 +59,292 @@ function out_signal = apply_hrtf_to_signal(input_signal, elev, azim, l_eq_hrir_S
 	out_signal = [out_signal_l out_signal_r];
 endfunction
 
-% return a vector containing norm(left, p) / norm(right, p) for every impulse response
-% between the two indices
-function v = amplitudedifference(start_index, end_index, l_eq_hrir_S, r_eq_hrir_S, p)
-	v=[];
+% }}}
+
+% INTERPOLATION WITHOUT DELAY COMPENSATION
+% {{{
+% get the impulse response between the two other ones
+% out_ir = (1-a) * irs(index_1) + a * irs(index_2)
+function out_irs = interpolate_impulse_response_simple_manual(l_eq_hrir_S, r_eq_hrir_S, index_1, index_2, a)
+	assert (0 <= a <= 1);
+	out_left  = (1 - a) * l_eq_hrir_S.content_m(index_1,:) + a * l_eq_hrir_S.content_m(index_2,:);
+	out_right = (1 - a) * r_eq_hrir_S.content_m(index_1,:) + a * r_eq_hrir_S.content_m(index_2,:);
+	out_irs = [out_left' out_right'];
+endfunction
+
+% Same as above but different interface
+% TODO find out how function overloading works in octave
+% simply specify a float as HRTF index (as in the database) and it will return the correct interpolation
+function out_irs = interpolate_impulse_response_simple(l_eq_hrir_S, r_eq_hrir_S, continuous_index)
+	before = floor(continuous_index);
+	after = ceil(continuous_index);
+	a = continuous_index - before;
+	out_irs = interpolate_impulse_response_simple_manual(l_eq_hrir_S, r_eq_hrir_S, before, after, a);
+endfunction
+% }}}
+
+% INTERPOLATION WITH DELAY COMPENSATION
+% {{{
+
+% instead of just linearly interpolating between two IRs, do this:
+% - find the time delay difference of the signals
+% - shift one signal so the delay becomes 0
+% - linearly interpolate between these two delay-normalised signals
+% - add back a delay which is the interpolation between the two delays
+% TODO: to have this run somewhat efficiently it would probably be smart to
+%       pre-calculate upsampled versions of all the impulse responses, as these
+%       signals are needed to find out the delay and to shift the signals around
+%       by less than 1 sample. (possible solution, upsample 5x - 10x and linearly
+%       interpolate the rest, TODO test if this sounds good)
+%       OR we do this and additionally precalculate the delays to avoid cross
+%       correlation altogether (at runtime)
+% TODO: use the float delay by linearly interpolating between the two adjacent delayed versions
+function out_sig = delay_compensated_interpolation_manual(signal_a, signal_b, upsampling, a)
+	assert (0 <= a <= 1, 'interpolation parameter a needs to be in [0, 1]');
+
+	% delay = delaydifference(signal_a, signal_b, upsampling);
+	a_upsampled = resample(signal_a, upsampling, 1);
+	b_upsampled = resample(signal_b, upsampling, 1);
+
+	% delay in samples of b in relation to a
+	delay = delaydifference(a_upsampled, b_upsampled, 1);
+
+	% TODO consider the actual delay by linearly interpolating
+	% between shifted signal versions for accuracy < 1 sample
+	delay_int = floor(delay);
+	b_upsampled_without_delay = delay_signal_int(b_upsampled, -delay_int);
+
+	% plot([b_upsampled_without_delay; a_upsampled]');
+	assert(abs(delaydifference(b_upsampled_without_delay, a_upsampled, 1)) < 1, 'delay is still bigger than 1 sample even though it should have been removed');
+
+	linear_interpolation_without_delay = (1-a) * a_upsampled + a * b_upsampled_without_delay;
+	interpolated_delay = floor(a * delay);
+
+	out_sig = resample(delay_signal_int(linear_interpolation_without_delay, interpolated_delay), 1, upsampling);
+endfunction
+
+function out_sig = delay_compensated_interpolation_efficient(l_eq_hrir_S, r_eq_hrir_S, continuous_index, delaydiffs)
+
+endfunction
+
+% Returns the left and right impulse response interpolated with delay compensation
+function out_irs = delay_compensated_interpolation(l_eq_hrir_S, r_eq_hrir_S, continuous_index)
+	upsampling = 10;
+
+	% convert from float index to two int indices and interpolation parameter a
+	before = floor(continuous_index);
+	after = ceil(continuous_index);
+	a = continuous_index - before;
+
+	left = delay_compensated_interpolation_manual(l_eq_hrir_S.content_m(before,:), l_eq_hrir_S.content_m(after,:), upsampling, a);
+	right = delay_compensated_interpolation_manual(r_eq_hrir_S.content_m(before,:), r_eq_hrir_S.content_m(after,:), upsampling, a);
+	out_irs = [left' right'];
+endfunction
+
+% delays a signal by a given number of samples
+function out_sig = delay_signal_int(in_sig, samples)
+
+	assert (size(in_sig)(1) == 1, 'in_sig must be a row vector');
+	assert(floor(samples) == samples, 'delay_signal_int: can only delay by integer number of samples');
+
+	len = length(in_sig);
+
+	if (samples > 0)
+		% delay the signal by samples
+		out_sig = [zeros([1 samples]) in_sig(1:len-samples)];
+	elseif (samples < 0)
+		% advance the signal by -samples
+		samples = -samples;
+		out_sig = [in_sig(samples+1:len) zeros([1 samples])];
+	else
+		out_sig = in_sig;
+	endif
+
+endfunction
+
+% Finds the delay difference between two HRTFs a and b
+% For decent results choose two HRTFs that are 'close' to each other
+% returns the delay between the responses (delay > 0 if b comes after a)
+% TODO find out why this works
+% TODO try replace these expensive calculations with a simple model of the delay or a LUT
+function diff = delaydifference(signal_a, signal_b, upsampling)
+	% business logic
+	assert (length(signal_a) == length(signal_b))
+	signallength = length(signal_a);
+
+	% autocorrelate the signal and upsample
+	autocorr_upsampled = resample(fftconv(fliplr(flipud(signal_a)), signal_b), upsampling, 1);
+
+	% find the peak
+	[value, peak_index] = max(autocorr_upsampled);
+	peak_index += parabolic_interpolation(autocorr_upsampled(peak_index-1:peak_index+1)) - 1;
+
+	% convert back to non-upsampled samples
+	peak_index /= upsampling;
+
+	% shift the peak so the middle (zero delay) is in the middle of the signal (2*len - 1)
+	diff = peak_index - (signallength - 1);
+endfunction
+
+% makes further calculations faster by upsampling the impulse responses in advance
+% and precalculating the delays
+
+% return a struct A such that:
+% A.diffs_left(i,j) = delaydifference(left(i), left(j))
+% A.diffs_right(i,j) = delaydifference(right(i), right(j))
+function irs_and_delaydiffs = precalculate_stuff(l_eq_hrir_S, r_eq_hrir_S, upsampling)
+	diffs_left = zeros(187);
+	diffs_right = zeros(187);
+
+	% calculate the delay difference matrices
+	% {{{
+	% fill the left upper triangle of the matrices
+	for i=(1:187)
+		for j=(i+1:187)
+			disp(strcat('i=', num2str(i), ',j=', num2str(j))); fflush(stdout);
+			diffs_left(i, j) = delaydifference(l_eq_hrir_S.content_m(i,:), l_eq_hrir_S.content_m(j,:), upsampling);
+			diffs_right(i, j) = delaydifference(r_eq_hrir_S.content_m(i,:), r_eq_hrir_S.content_m(j,:), upsampling);
+		endfor
+	endfor
+
+	% use antisymmetry of delaydifference to fill the rest of the matrices
+	diffs_left  = diffs_left  - diffs_left';
+	diffs_right = diffs_right - diffs_right';
+	% }}}
+
+	% calculate the upsampled signals
+	% {{{
+	irs_left = zeros(187, 512 * upsampling);
+	irs_right = zeros(187, 512 * upsampling);
+
+	for i=(1:187)
+		irs_left(i,:) = resample(l_eq_hrir_S.content_m(i,:), upsampling, 1);
+		irs_right(i,:) = resample(r_eq_hrir_S.content_m(i,:), upsampling, 1);
+	endfor
+
+	irs_and_delaydiffs = struct(
+		'upsampling', upsampling,
+		'diffs_left', diffs_left, 'diffs_right', diffs_right,
+		'irs_left', irs_left, 'irs_right', irs_right
+	);
+	% }}}
+
+	save 'irs_and_delaydiffs.mat' irs_and_delaydiffs
+endfunction
+
+% finds the peak of the parabola fitting the three points: f(x) = ax^2 + bx + c
+% (a,b,c) determined by f([-1 0 1]) = vec
+function peak = parabolic_interpolation(vec)
+	% check the input
+	assert (length(vec) == 3);
+	[_, index] = max(vec);
+	assert (index == 2);
+
+	% proof left to the reader
+	c = vec(2);
+	a = 0.5 * (vec(1) + vec(3) - 2 * c);
+	b = 0.5 * (vec(3) - vec(1));
+	assert (a != 0);
+	peak = -b/(2*a);
+
+endfunction
+
+% }}}
+
+% DISPLAY FUNCTIONS
+% {{{
+% make a plot of a series of HRTFs in the time domain
+% x-axis: time
+% y-axis: azimuth angle of HRTF
+% z-axis: amplitude
+function imshow_interpolation(l_eq_hrir_S, r_eq_hrir_S, first, last, steps)
+	% samples to show from the impulse response
+	ir_length = 128;
+
+	% upsample the impulse responses before displaying by this factor
+	display_upsampling = 4;
+
+	% use this upsampling factor for the delay compensated interpolation
+	interpolation_upsampling = 10;
+
+	image_left  = [];
+	image_right = [];
+
+	for index=linspace(first, last, steps)
+		disp(index);
+		fflush(stdout);
+
+		impulse_resps = interpolate_impulse_response_simple(l_eq_hrir_S, r_eq_hrir_S, index);
+
+		ir_left = resample(impulse_resps(1:ir_length, 1), display_upsampling, 1);
+		ir_right = resample(impulse_resps(1:ir_length, 2), display_upsampling, 1);
+		image_left = [image_left; ir_left'];
+		image_right = [image_right; ir_right'];
+	endfor
+
+	subplot(221)
+	axis('tight', [0 ir_length 0 360]);
+	imagesc(image_left, [-1 1]);
+	subplot(222)
+	axis('tight', [0 ir_length 0 360]);
+	imagesc(image_right, [-1 1]);
+
+	image_left  = [];
+	image_right = [];
+
+	for index=linspace(first, last, steps)
+		disp(index);
+		fflush(stdout);
+
+		impulse_resps = delay_compensated_interpolation(l_eq_hrir_S, r_eq_hrir_S, index);
+
+		ir_left = resample(impulse_resps(1:ir_length, 1), display_upsampling, 1);
+		ir_right = resample(impulse_resps(1:ir_length, 2), display_upsampling, 1);
+		image_left = [image_left; ir_left'];
+		image_right = [image_right; ir_right'];
+	endfor
+
+	subplot(223)
+	axis('tight', [0 ir_length 0 360]);
+	imagesc(image_left, [-1 1]);
+	subplot(224)
+	axis('tight', [0 ir_length 0 360]);
+	imagesc(image_right, [-1 1]);
+
+endfunction
+
+% plot HRTFs successively in the time domain
+function plot_hrtf_impulse(l_eq_hrir_S, r_eq_hrir_S, start_index, end_index, pause_s)
 	for i=(start_index:end_index)
-		v = [v; norm(l_eq_hrir_S.content_m(i,:), p) / norm(r_eq_hrir_S.content_m(i,:), p)];
+		disp(strcat(
+			'azim= ', num2str(l_eq_hrir_S.azim_v(i)),
+			', elev=', num2str(l_eq_hrir_S.elev_v(i))
+		));
+		fflush(stdout);
+		responses = [[l_eq_hrir_S.content_m(i,:)' + 1], r_eq_hrir_S.content_m(i,:)'];
+		plot([[2.5 -1.5]; responses]);
+		pause(pause_s)
 	endfor
 endfunction
 
-
-% make a short sample rotate around the listener's head
-function out_signal = circle(input_signal, elev, azim_step, l_eq_hrir_S, r_eq_hrir_S)
-	degrees = 0;
-	out_signal = [];
-	while (degrees < 360)
-		out_signal = [out_signal; apply_hrtf_to_signal(input_signal, 0, degrees, l_eq_hrir_S, r_eq_hrir_S)];
-		degrees += azim_step;
-		% disp(degrees);
-	endwhile
-	out_signal = out_signal ./ (2 * norm(out_signal, inf));
+% plot HRTFs successively in the frequency domain
+function plot_hrtf_freq(l_eq_hrir_S, r_eq_hrir_S, start_index, end_index, pause_s)
+	for i=(start_index:end_index)
+		disp(strcat(
+			'azim= ', num2str(l_eq_hrir_S.azim_v(i)),
+			', elev=', num2str(l_eq_hrir_S.elev_v(i))
+		));
+		fflush(stdout);
+		responses = log(abs([[fft(l_eq_hrir_S.content_m(i,:)')], fft(r_eq_hrir_S.content_m(i,:)')])((1:256),:));
+		plot([responses]);
+		pause(pause_s)
+	endfor
 endfunction
+
+% }}}
+
+% TEST SIGNAL GENERATOR FUNCTIONS
+% {{{
 
 % construct a signal that repeats in_sig but makes it rotate around the listener's head
 % this version doesn't wait for one signal to completely fade out before the next one starts
@@ -123,118 +365,6 @@ function out_signal = continuous_circle_no_interpolation(in_sig, elev, azim_star
 		out_r(out_sig_indices) = out_r(out_sig_indices) + fftconv(in_sig, r_eq_hrir_S.content_m(azim_idx,:)');
 	endfor
 	out_signal = [out_l out_r];
-endfunction
-
-
-% get the impulse response between the two other ones
-% out_ir = (1-a) * irs(index_1) + a * irs(index_2)
-function out_irs = interpolate_impulse_response_simple_manual(l_eq_hrir_S, r_eq_hrir_S, index_1, index_2, a)
-	assert (0 <= a <= 1);
-	out_left  = (1 - a) * l_eq_hrir_S.content_m(index_1,:) + a * l_eq_hrir_S.content_m(index_2,:);
-	out_right = (1 - a) * r_eq_hrir_S.content_m(index_1,:) + a * r_eq_hrir_S.content_m(index_2,:);
-	out_irs = [out_left' out_right'];
-endfunction
-
-% Same as above but different interface
-% TODO find out how function overloading works in octave
-% simply specify a float as HRTF index (as in the database) and it will return the correct interpolation
-function out_irs = interpolate_impulse_response_simple(l_eq_hrir_S, r_eq_hrir_S, continuous_index)
-	before = floor(continuous_index);
-	after = ceil(continuous_index);
-	a = continuous_index - before;
-	out_irs = interpolate_impulse_response_simple_manual(l_eq_hrir_S, r_eq_hrir_S, before, after, a);
-endfunction
-
-
-% TODO finish this
-% instead of just linearly interpolating between two IRs, do this:
-% - find the time delay difference of the signals
-% - shift one signal so the delay becomes 0
-% - linearly interpolate between these two delay-normalised signals
-% - add back a delay which is the interpolation between the two delays
-% TODO: to have this run somewhat efficiently it would probably be smart to
-%       pre-calculate upsampled versions of all the impulse responses, as these
-%       signals are needed to find out the delay and to shift the signals around
-%       by less than 1 sample. (possible solution, upsample 5x - 10x and linearly
-%       interpolate the rest, TODO test if this sounds good)
-%       OR we do this and additionally precalculate the delays to avoid cross
-%       correlation altogether (at runtime)
-function out_irs = interpolate_impulse_response_delay_manual(l_eq_hrir_S, r_eq_hrir_S, index_1, index_2, a)
-	delay_diff_l = delaydifference(l_eq_hrir_S.content_m(index_1,:), l_eq_hrir_S.content_m(index_2,:), 4);
-	delay_diff_r = delaydifference(r_eq_hrir_S.content_m(index_1,:), r_eq_hrir_S.content_m(index_2,:), 4);
-
-	interpolated_delay_l = a * delay_diff_l;
-	interporated_deray_r = a * deray_diff_r;
-endfunction
-
-% Finds the delay difference between two HRTFs a and b
-% For decent results choose two HRTFs that are 'close' to each other
-% returns the delay between the responses (delay > 0 if a comes after b)
-% TODO find out why this works
-% TODO try replace these expensive calculations with a simple model of the delay or a LUT
-function diff = delaydifference(signal_a, signal_b, upsampling)
-	% business logic
-	assert (length(signal_a) == length(signal_b))
-	signallength = length(signal_a);
-
-	% autocorrelate the signal and upsample
-	autocorr_upsampled = resample(fftconv(signal_a, fliplr(flipud(signal_b))), upsampling, 1);
-
-	% find the peak
-	[value, peak_index] = max(autocorr_upsampled);
-	peak_index += parabolic_interpolation(autocorr_upsampled(peak_index-1:peak_index+1)) - 1;
-
-	% convert back to non-upsampled samples
-	peak_index /= upsampling;
-
-	% shift the peak so the middle (zero delay) is in the middle of the signal (2*len - 1)
-	diff = peak_index - (signallength - 1);
-endfunction
-
-% finds the peak of the parabola fitting the three points: f(x) = ax^2 + bx + c
-% (a,b,c) determined by f([-1 0 1]) = vec
-function peak = parabolic_interpolation(vec)
-	% check the input
-	assert (length(vec) == 3);
-	[_, index] = max(vec);
-	assert (index == 2);
-
-	% proof left to the reader
-	c = vec(2);
-	a = 0.5 * (vec(1) + vec(3) - 2 * c);
-	b = 0.5 * (vec(3) - vec(1));
-	assert (a != 0);
-	peak = -b/(2*a);
-
-endfunction
-
-% make a plot of a series of HRTFs in the time domain
-% x-axis: time
-% y-axis: azimuth angle of HRTF
-% z-axis: amplitude
-function imshow_interpolation(l_eq_hrir_S, r_eq_hrir_S, first, last, steps)
-	% samples to show from the impulse response
-	ir_length = 128;
-	% upsample the impulse responses by this factor
-	upsampling = 4;
-
-	image_left  = [];
-	image_right = [];
-
-	for index=linspace(first, last, steps)
-		impulse_resps = interpolate_impulse_response_simple(l_eq_hrir_S, r_eq_hrir_S, index);
-		ir_left = resample(impulse_resps(1:ir_length, 1), upsampling, 1);
-		ir_right = resample(impulse_resps(1:ir_length, 2), upsampling, 1);
-		image_left = [image_left; ir_left'];
-		image_right = [image_right; ir_right'];
-	endfor
-
-	subplot(121)
-	axis('tight', [0 ir_length 0 360]);
-	imagesc(image_left, [-1 1]);
-	subplot(122)
-	axis('tight', [0 ir_length 0 360]);
-	imagesc(image_right, [-1 1]);
 endfunction
 
 % assumption: input signal is a column vector, i.e. size(in_sig) == [.., 0]
@@ -269,7 +399,21 @@ function out_signal = continuous_circle_with_interpolation(in_sig, azim_start_id
 	out_signal = [out_l out_r];
 endfunction
 
+% make a short sample rotate around the listener's head
+function out_signal = circle(input_signal, elev, azim_step, l_eq_hrir_S, r_eq_hrir_S)
+	degrees = 0;
+	out_signal = [];
+	while (degrees < 360)
+		out_signal = [out_signal; apply_hrtf_to_signal(input_signal, 0, degrees, l_eq_hrir_S, r_eq_hrir_S)];
+		degrees += azim_step;
+		% disp(degrees);
+	endwhile
+	out_signal = out_signal ./ (2 * norm(out_signal, inf));
+endfunction
+
+% }}}
+
 filename = 'binauraltest.wav';
 % audiowrite(filename, circle(input_signal, 0, 15, l_eq_hrir_S, r_eq_hrir_S), 44100);
-audiowrite(filename, continuous_circle_with_interpolation(rand([44100 * 2, 1])-0.5, 73, 96, 2000, l_eq_hrir_S, r_eq_hrir_S), 44100);
+% audiowrite(filename, continuous_circle_with_interpolation(rand([44100 * 2, 1])-0.5, 73, 96, 2000, l_eq_hrir_S, r_eq_hrir_S), 44100);
 % disp(strcat('wrote:', filename));
