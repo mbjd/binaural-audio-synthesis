@@ -1,3 +1,6 @@
+load recherche.ircam.fr/COMPENSATED/MAT/HRIR/IRC_1032_C_HRIR.mat
+
+
 % makes further calculations faster by upsampling the impulse responses in advance
 % and precalculating the delays
 
@@ -44,3 +47,26 @@ function irs_and_delaydiffs = upsample_irs(l_eq_hrir_S, r_eq_hrir_S, upsampling)
 
 	save 'irs_and_delaydiffs.mat' irs_and_delaydiffs
 endfunction
+
+% Finds the delay difference between two HRTFs a and b
+% For decent results choose two HRTFs that are 'close' to each other
+% returns the delay between the responses (delay > 0 if b comes after a)
+function diff = delaydifference(signal_a, signal_b, upsampling)
+	% business logic
+	assert (length(signal_a) == length(signal_b))
+	signallength = length(signal_a);
+
+	% autocorrelate the signal and upsample
+	autocorr_upsampled = resample(fftconv(fliplr(flipud(signal_a)), signal_b), upsampling, 1);
+
+	% find the peak
+	[value, peak_index] = max(autocorr_upsampled);
+	peak_index += parabolic_interpolation(autocorr_upsampled(peak_index-1:peak_index+1)) - 1;
+
+	% convert back to non-upsampled samples
+	peak_index /= upsampling;
+
+	% shift the peak so the middle (zero delay) is in the middle of the signal (2*len - 1)
+	diff = peak_index - (signallength - 1);
+endfunction
+
