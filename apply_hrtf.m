@@ -135,7 +135,7 @@ endfunction
 
 % calculate the delay compensated interpolated impulse response more efficiently.
 % irs_and_delaydiffs is a struct as calculated in upsample_irs.m
-function out_sig = delay_compensated_interpolation_efficient(irs_and_delaydiffs, continuous_index)
+function out_sig = delay_compensated_interpolation_efficient(irs_and_delaydiffs, continuous_index, float_delay)
 	upsampling = irs_and_delaydiffs.upsampling;
 
 	% convert from float index to two int indices and interpolation parameter a
@@ -144,14 +144,20 @@ function out_sig = delay_compensated_interpolation_efficient(irs_and_delaydiffs,
 	a = continuous_index - before;
 
 	% look up delay difference in upsampled samples
-	delay_left = floor(upsampling * irs_and_delaydiffs.diffs_left(before, after));
-	delay_right = floor(upsampling * irs_and_delaydiffs.diffs_right(before, after));
+	delay_left = upsampling * irs_and_delaydiffs.diffs_left(before, after);
+	delay_right = upsampling * irs_and_delaydiffs.diffs_right(before, after);
 
 	% get the impulse responses
 	left_before  = irs_and_delaydiffs.irs_left(before,:);
 	right_before = irs_and_delaydiffs.irs_right(before,:);
-	left_after_nodelay = delay_signal_int(irs_and_delaydiffs.irs_left(after,:), -delay_left);
-	right_after_nodelay = delay_signal_int(irs_and_delaydiffs.irs_right(after,:), -delay_right);
+
+	if (float_delay)
+		left_after_nodelay = delay_signal_float(irs_and_delaydiffs.irs_left(after,:), -delay_left);
+		right_after_nodelay = delay_signal_float(irs_and_delaydiffs.irs_right(after,:), -delay_right);
+	else
+		left_after_nodelay = delay_signal_int(irs_and_delaydiffs.irs_left(after,:), -floor(delay_left));
+		right_after_nodelay = delay_signal_int(irs_and_delaydiffs.irs_right(after,:), -floor(delay_right));
+	endif
 
 	% interpolate the impulse responses
 	% TODO maybe try to do the downsampling earlier for efficiency
@@ -159,13 +165,20 @@ function out_sig = delay_compensated_interpolation_efficient(irs_and_delaydiffs,
 	right_interpolated_nodelay = (1-a) * right_before + a * right_after_nodelay;
 
 	% interpolate the delays and add them back to the signals
-	left_delay_interpolated = floor(a * delay_left);
-	right_delay_interpolated = floor(a * delay_right);
+	left_delay_interpolated = a * delay_left;
+	right_delay_interpolated = a * delay_right;
 
 	% add interpolated delay & downsample
 	% TODO instead of resampling just cut the samples out that we need since there are no higher frequencies anyway
-	left_interpolated = resample(delay_signal_int(left_interpolated_nodelay, left_delay_interpolated), 1, upsampling);
-	right_interpolated = resample(delay_signal_int(right_interpolated_nodelay, right_delay_interpolated), 1, upsampling);
+	if (float_delay)
+		left_interpolated = delay_signal_float(left_interpolated_nodelay, left_delay_interpolated)(1:upsampling:length(left_interpolated_nodelay));
+		right_interpolated = delay_signal_float(right_interpolated_nodelay, right_delay_interpolated)(1:upsampling:length(left_interpolated_nodelay));
+		% left_interpolated = resample(delay_signal_float(left_interpolated_nodelay, left_delay_interpolated), 1, upsampling);
+		% right_interpolated = resample(delay_signal_float(right_interpolated_nodelay, right_delay_interpolated), 1, upsampling);
+	else
+		left_interpolated = resample(delay_signal_int(left_interpolated_nodelay, floor(left_delay_interpolated)), 1, upsampling);
+		right_interpolated = resample(delay_signal_int(right_interpolated_nodelay, floor(right_delay_interpolated)), 1, upsampling);
+	endif
 
 	out_sig = [left_interpolated' right_interpolated'];
 endfunction
@@ -186,7 +199,6 @@ endfunction
 
 % delays a signal by a given number of samples
 function out_sig = delay_signal_int(in_sig, samples)
-
 	assert (size(in_sig)(1) == 1, 'in_sig must be a row vector');
 	assert(floor(samples) == samples, 'delay_signal_int: can only delay by integer number of samples');
 
@@ -202,7 +214,20 @@ function out_sig = delay_signal_int(in_sig, samples)
 	else
 		out_sig = in_sig;
 	endif
+endfunction
 
+% delays a signal by a given number of samples
+function out_sig = delay_signal_float(in_sig, samples)
+	assert (size(in_sig)(1) == 1, 'in_sig must be a row vector');
+
+	before = floor(samples);
+	after = ceil(samples);
+	a = samples - before;
+
+	delayed_before = delay_signal_int(in_sig, before);
+	delayed_after = delay_signal_int(in_sig, after);
+
+	out_sig = (1-a) * delayed_before + a * delayed_after;
 endfunction
 
 % Finds the delay difference between two HRTFs a and b
@@ -283,13 +308,13 @@ function imshow_interpolation(l_eq_hrir_S, r_eq_hrir_S, irs_and_delaydiffs, firs
 	axis('tight', [0 ir_length 0 360]);
 	imagesc(image_right, [-1 1]);
 
-	% fancy delay compensated interpolation
+	% delay compensated interpolation with precalculated upsamplings and delays, with int delay
 	image_left  = [];
 	image_right = [];
 	for index=linspace(first, last, steps)
 		disp(index);
 		fflush(stdout);
-		impulse_resps = delay_compensated_interpolation(l_eq_hrir_S, r_eq_hrir_S, index);
+		impulse_resps = delay_compensated_interpolation_efficient(irs_and_delaydiffs, index, false);
 		ir_left = resample(impulse_resps(1:ir_length, 1), display_upsampling, 1);
 		ir_right = resample(impulse_resps(1:ir_length, 2), display_upsampling, 1);
 		image_left = [image_left; ir_left'];
@@ -303,13 +328,13 @@ function imshow_interpolation(l_eq_hrir_S, r_eq_hrir_S, irs_and_delaydiffs, firs
 	imagesc(image_right, [-1 1]);
 
 
-	% delay compensated interpolation with precalculated upsamplings and delays
+	% delay compensated interpolation with precalculated upsamplings and delays, with float delay
 	image_left  = [];
 	image_right = [];
 	for index=linspace(first, last, steps)
 		disp(index);
 		fflush(stdout);
-		impulse_resps = delay_compensated_interpolation_efficient(irs_and_delaydiffs, index);
+		impulse_resps = delay_compensated_interpolation_efficient(irs_and_delaydiffs, index, true);
 		ir_left = resample(impulse_resps(1:ir_length, 1), display_upsampling, 1);
 		ir_right = resample(impulse_resps(1:ir_length, 2), display_upsampling, 1);
 		image_left = [image_left; ir_left'];
