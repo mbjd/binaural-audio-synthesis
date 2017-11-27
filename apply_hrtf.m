@@ -545,7 +545,10 @@ function out_signal = make_signal_move(in_sig, chunksize, index_function, irs_an
 		% write to the output signal
 		out_l(out_chunk_indices) = out_l(out_chunk_indices) + out_chunk_left;
 		out_r(out_chunk_indices) = out_r(out_chunk_indices) + out_chunk_right;
+
+		printf('%.2f%%       \r', (100 * i / in_length)); fflush(stdout);
 	endfor
+	printf('\n');
 
 	out_signal = [out_l out_r];
 endfunction
