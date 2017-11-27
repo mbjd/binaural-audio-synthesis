@@ -567,13 +567,12 @@ endfunction
 
 % }}}
 
-filename = 'binauraltest.wav';
+% filename = 'binauraltest.wav';
 % audiowrite(filename, circle(input_signal, 0, 15, l_eq_hrir_S, r_eq_hrir_S), 44100);
 % audiowrite(filename, continuous_circle_with_interpolation(rand([44100 * 2, 1])-0.5, 73, 96, 2000, l_eq_hrir_S, r_eq_hrir_S), 44100);
 % disp(strcat('wrote:', filename));
 
 n=4;
-noise = (rand([n * 44100, 1]) - 0.5) * 2;
-f = (@(t) t * (23 / (n * 44100)) + 73);
-out = make_signal_move(noise, 200, f, irs_and_delaydiffs);
-audiowrite('noise_out.wav', out, 44100);
+f = (@(t) mod(t, n*44100) * (24 / (n * 44100)) + 73);
+out = make_signal_move(audioread('netzerk.wav'), 20, f, irs_and_delaydiffs);
+audiowrite('test.wav', out, 44100);
