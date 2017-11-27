@@ -143,6 +143,9 @@ function out_sig = delay_compensated_interpolation_efficient(irs_and_delaydiffs,
 	after = ceil(continuous_index);
 	a = continuous_index - before;
 
+	% TODO remove this later
+	if (after == 97) after = 73; endif
+
 	% look up delay difference in upsampled samples
 	delay_left = upsampling * irs_and_delaydiffs.diffs_left(before, after);
 	delay_right = upsampling * irs_and_delaydiffs.diffs_right(before, after);
