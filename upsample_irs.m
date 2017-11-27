@@ -1,5 +1,5 @@
 load recherche.ircam.fr/COMPENSATED/MAT/HRIR/IRC_1032_C_HRIR.mat
-
+% load recherche.ircam.fr/RAW/MAT/HRIR/IRC_1026_R_HRIR.mat
 
 % makes further calculations faster by upsampling the impulse responses in advance
 % and precalculating the delays
@@ -34,6 +34,7 @@ function irs_and_delaydiffs = upsample_irs(l_eq_hrir_S, r_eq_hrir_S, upsampling)
 	irs_right = zeros(187, 512 * upsampling);
 
 	for i=(1:187)
+		disp(num2str(i));
 		irs_left(i,:) = resample(l_eq_hrir_S.content_m(i,:), upsampling, 1);
 		irs_right(i,:) = resample(r_eq_hrir_S.content_m(i,:), upsampling, 1);
 	endfor
