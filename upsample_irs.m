@@ -47,7 +47,7 @@ function irs_and_delaydiffs = upsample_irs(l_eq_hrir_S, r_eq_hrir_S, upsampling)
 	);
 	% }}}
 
-	save 'irs_and_delaydiffs.mat' irs_and_delaydiffs
+	save -6 'irs_and_delaydiffs.mat' irs_and_delaydiffs
 endfunction
 
 % Finds the delay difference between two HRTFs a and b
