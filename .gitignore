@@ -1,4 +1,5 @@
 *
 !apply_hrtf.m
+!apply_hrtf.py
 !upsample_irs.m
 !.gitignore
