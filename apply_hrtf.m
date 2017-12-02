@@ -411,34 +411,6 @@ function imshow_interpolation_dft(l_eq_hrir_S, r_eq_hrir_S, irs_and_delaydiffs, 
 endfunction
 
 
-% plot HRTFs successively in the time domain
-function plot_hrtf_impulse(l_eq_hrir_S, r_eq_hrir_S, start_index, end_index, pause_s)
-	for i=(start_index:end_index)
-		disp(strcat(
-			'azim= ', num2str(l_eq_hrir_S.azim_v(i)),
-			', elev=', num2str(l_eq_hrir_S.elev_v(i))
-		));
-		fflush(stdout);
-		responses = [[l_eq_hrir_S.content_m(i,:)' + 1], r_eq_hrir_S.content_m(i,:)'];
-		plot([[2.5 -1.5]; responses]);
-		pause(pause_s)
-	endfor
-endfunction
-
-% plot HRTFs successively in the frequency domain
-function plot_hrtf_freq(l_eq_hrir_S, r_eq_hrir_S, start_index, end_index, pause_s)
-	for i=(start_index:end_index)
-		disp(strcat(
-			'azim= ', num2str(l_eq_hrir_S.azim_v(i)),
-			', elev=', num2str(l_eq_hrir_S.elev_v(i))
-		));
-		fflush(stdout);
-		responses = log(abs([[fft(l_eq_hrir_S.content_m(i,:)')], fft(r_eq_hrir_S.content_m(i,:)')])((1:256),:));
-		plot([responses]);
-		pause(pause_s)
-	endfor
-endfunction
-
 % }}}
 
 % TEST SIGNAL GENERATOR FUNCTIONS
