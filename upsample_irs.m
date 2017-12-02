@@ -8,6 +8,7 @@ load recherche.ircam.fr/COMPENSATED/MAT/HRIR/IRC_1032_C_HRIR.mat
 % A.diffs_left(i,j) = delaydifference(left(i), left(j))
 % A.diffs_right(i,j) = delaydifference(right(i), right(j))
 % A.irs_{left,right}(i,:) =  HRTF impulse response at index i, upsampled <A.upsampling> times
+% Note that the delay differences refer to non-upsampled samples
 function irs_and_delaydiffs = upsample_irs(l_eq_hrir_S, r_eq_hrir_S, upsampling)
 	diffs_left = zeros(187);
 	diffs_right = zeros(187);
