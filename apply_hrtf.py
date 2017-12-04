@@ -17,17 +17,18 @@ import matplotlib.pyplot as pl
 
 # This should be a matlab 6 compatible file (save -6 <file> <vars>
 # in octave) as created by upsample_irs.m
-def load_irs_and_delaydiffs(filename = 'irs_and_delaydiffs_compensated_6.mat'):
+# samples_to_keep
+def load_irs_and_delaydiffs(filename = 'irs_and_delaydiffs_compensated_6.mat', samples_to_keep = 512):
 	m = sp.io.loadmat(filename)['irs_and_delaydiffs']
 
 	class irs_and_delaydiffs:
-		upsampling = m[0][0]['upsampling'][0][0]
+		upsampling = int(m[0][0]['upsampling'][0][0])
 
 		diffs_left = m[0][0]['diffs_left']
 		diffs_right = m[0][0]['diffs_right']
 
-		irs_left = m[0][0]['irs_left']
-		irs_right = m[0][0]['irs_right']
+		irs_left = m[0][0]['irs_left'][:,:samples_to_keep * upsampling]
+		irs_right = m[0][0]['irs_right'][:,:samples_to_keep * upsampling]
 
 	return irs_and_delaydiffs
 
@@ -67,8 +68,8 @@ def delay_compensated_interpolation(irs_and_delaydiffs, before: int, after: int,
 	delay_l_interpolated = alpha * delay_l
 	delay_r_interpolated = alpha * delay_r
 
-	l_interpolated = delay_signal_float(l_interpolated_nodelay, delay_l_interpolated, int(upsampling));
-	r_interpolated = delay_signal_float(r_interpolated_nodelay, delay_r_interpolated, int(upsampling));
+	l_interpolated = delay_signal_float(l_interpolated_nodelay, delay_l_interpolated, upsampling);
+	r_interpolated = delay_signal_float(r_interpolated_nodelay, delay_r_interpolated, upsampling);
 
 	return np.concatenate([l_interpolated, r_interpolated]).reshape([2, l_interpolated.size])
 
@@ -149,7 +150,7 @@ def make_signal_move(in_signal, chunksize: int, index_function, irs_and_delaydif
 	IDEA
 
 	to make this more efficient for a given resolution, use chunks and
-	sub-chunks: each chunk has a newly computed delay compensated
+	sub-chunks, where each chunk has a newly computed delay compensated
 	interpolated IR at the start and end, and within the chunk, the IR is
 	simply interpolated linearly between the two actual interpolations for
 	each sub-chunk. The chunks would have to be small enough that the delay
@@ -180,29 +181,57 @@ def make_signal_move(in_signal, chunksize: int, index_function, irs_and_delaydif
 		out_r[out_indices] += out_chunk_right;
 
 		if ((i // chunksize) % 64 == 0):
-			print('{:.1f}%           '.format(100 * i / in_length), end='\r')
-	print('100.0%')
+			print(' {:.1f}%           '.format(100 * i / in_length), end='\r')
+	print(' 100.0%')
 
-	out_sig = np.concatenate([out_l, out_r]).reshape([2, out_l.size]).T
+	out_sig = np.concatenate([out_l, out_r]).reshape([2, out_l.size]).astype(np.float32).T
 	return out_sig / np.max([out_sig.max(), -(out_sig.min())])
 # }}}
 
 def main():
-	# needs to be mono
 	start = time.time()
-	fs, y = wavfile.read('netzwerk.wav')
-	assert(len(y.shape) == 1)
+	try:
+		input_file = sys.argv[1]
+	except IndexError:
+		printf('$1 empty - should be input file', file=sys.stderr)
+		sys.exit(1)
+
+	input_filename = '{}.wav'.format(input_file)
+	fs, y = wavfile.read(input_filename)
 	y = y.astype(np.float32) / y.max()
 
-	irs_and_delaydiffs = load_irs_and_delaydiffs('irs_and_delaydiffs_compensated_6.mat')
+	samples_to_keep = 150;
+	T=2 # Period of signal moving around head
+	chunksize = 50
 
-	T=1 # Period of signal moving around head
-	chunksize = 10
-	out_sig = make_signal_move(y, chunksize, lambda t: (t % (T*fs)) * (24 / (T*fs)) + 73, irs_and_delaydiffs).astype(np.float32);
+	irs_and_delaydiffs = load_irs_and_delaydiffs('irs_and_delaydiffs_compensated_6.mat', samples_to_keep = samples_to_keep)
 
-	out_filename = 'python-netzwerk-{}.wav'.format(chunksize);
+	if len(y.shape) == 1:
+		# we have a mono signal
+		out_sig = make_signal_move(y, chunksize, lambda t: (t % (T*fs)) * (24 / (T*fs)) + 73, irs_and_delaydiffs).astype(np.float32);
+	elif len(y.shape) == 2:
+		print('The file \'{}\' is in stereo - enabling stereo mode!!! (this will take twice as long)'.format(input_filename))
+		f_left = lambda t: (t % (T*fs)) * (24 / (T*fs)) + 73
+		f_right = lambda t: (t % (T*fs)) * (24 / (T*fs)) + 73 + 12 # 12 indices = half a circle
+
+		# Calculate the contributions from the left and right channels separately
+		out_left = make_signal_move(y[:,0], chunksize, f_left, irs_and_delaydiffs)
+		out_right = make_signal_move(y[:,1], chunksize, f_right, irs_and_delaydiffs)
+
+		# Average them (both are already stereo)
+		out_sig = 0.5 * (out_left + out_right)
+	else:
+		printf('wrong input shape: {}'.format(y.shape), file=sys.stderr)
+		sys.exit(1)
+
+	out_filename = 'python-{}-{}-{}.wav'.format(input_file, chunksize, samples_to_keep);
 	wavfile.write(out_filename, fs, out_sig.astype(np.float32))
-	print("wrote to '{}' - took {:.2f} secs".format(out_filename, time.time() - start))
+
+	elapsed_time = time.time() - start;
+	print("wrote to '{}' - took {:.2f} secs - {:.2f} faster than real time".format(
+		out_filename,
+		elapsed_time,
+		(y.size / fs) / (elapsed_time)))
 
 if __name__ == '__main__':
 	main()
