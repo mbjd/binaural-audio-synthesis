@@ -31,7 +31,6 @@ def load_irs_and_delaydiffs(filename = 'irs_and_delaydiffs_compensated_6.mat'):
 
 	return irs_and_delaydiffs
 
-
 # }}}
 
 # HRTF interpolation
@@ -145,6 +144,28 @@ def make_signal_move(in_signal, chunksize: int, index_function, irs_and_delaydif
 	out_chunk_left = np.zeros([chunksize + ir_length - 1])
 	out_chunk_right = np.zeros([chunksize + ir_length - 1])
 	out_indices = np.zeros([chunksize + ir_length - 1], dtype=np.uint64)
+
+	'''
+	IDEA
+
+	to make this more efficient for a given resolution, use chunks and
+	sub-chunks: each chunk has a newly computed delay compensated
+	interpolated IR at the start and end, and within the chunk, the IR is
+	simply interpolated linearly between the two actual interpolations for
+	each sub-chunk. The chunks would have to be small enough that the delay
+	difference between the two adjacent interpolated impulse response (at
+	the start of one chunk and the next one) is much smaller than one
+	sample.
+
+	For example, we could use chunks of 400 and sub-chunks of 10 samples
+	(400 samples = 9 ms, during which a sound source would have to travel
+	at an angular velocity of (...) to exceed a difference in delay
+	difference more than 1 sample)
+
+	(TODO: actually calculate this and maybe implement a dynamic algorithm
+	based on the difference quotient of index_function)
+
+	'''
 
 	for i in range(0, in_length, chunksize):
 		in_chunk = in_signal[i:i+chunksize];
