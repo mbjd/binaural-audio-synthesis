@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as pl
 from mpl_toolkits.mplot3d import Axes3D
 
+
 def plot_closest_points(elev, azim):
 	deg2rad = (2*np.pi) / 360
 	c_pts = get_cartesian_samplepoints()
@@ -70,11 +71,60 @@ def get_point_distances_cartesian(point_cartesian, cart_points):
 	distances = np.linalg.norm(vector_diffs, ord=2, axis=1)
 	return distances
 
-def get_cartesian_samplepoints():
+def azim_to_interpolation_params_deg(elev, azim):
+	deg2rad = 2 * np.pi / 360
+	return azim_to_index(elev * deg2rad, azim * deg2rad)
+
+def azim_to_interpolation_params(elev, azim):
 	'''
-	Return an array A of shape (187, 3) such that:
-	A[i, :] = [x, y, z] of the point at (zero-based) index i in the HRTF database
+	Return the tuple (before, a, after) such that the angle azim
+	corresponds to the index (1-a) * before + a * after
+	elev, azim: polar angles
+	elev needs to be an angle from the database: [-45,-30,-15,0,15,30,45,60,75,90] .* (2pi / 360)
+	azim can technically be arbitrary but will be used mod 2pi
 	'''
+	azim = azim % (2*np.pi)
+	assert azim >= 0
+	elev = np.clip(elev, -np.pi/4, np.pi/2)
+
+	float_radian_tolerance = 0.00001
+
+	if abs(elev - np.pi/2) < float_radian_tolerance:
+		return (186, 0., 186)
+
+	# TODO
+	# index_elev_azim = get_index_elev_azim()
+	# only keep entries with the correct elevation
+	index_azim = index_elev_azim[np.where(np.abs(index_elev_azim[:,1] - elev) < float_radian_tolerance)][:,[0,2]]
+
+	if (index_azim.size == 0):
+		raise ValueError('ele must be one of the values in the database: [-45,-30,-15,0,15,30,45,60,75,90] .* (2pi / 360)')
+
+	before = int(0.5 + index_azim[np.where(index_azim[:,1] <= azim)][:,0].max())
+	try:
+		after = int(0.5 + index_azim[np.where(index_azim[:,1] > azim)][:,0].min())
+	except ValueError:
+		# if there is no index with azimuth > azim, then we're at the last entry of the array
+		# so we can roll over to the first one
+		after = int(0.5 + index_azim[0,0])
+
+
+	before_azim = index_elev_azim[before,2]
+	after_azim = index_elev_azim[after,2]
+
+	if after_azim < before_azim:
+		assert after_azim == 0
+		after_azim = 2 * np.pi
+
+	a = (azim - before_azim) / (after_azim - before_azim)
+
+	return (before, a, after)
+
+
+
+
+
+def get_index_elev_azim():
 	# differences to ./recherche.ircam.fr/indices:
 	# - zero-based indexing (every index is one less)
 	index_elev_azim = np.array([
@@ -269,6 +319,14 @@ def get_cartesian_samplepoints():
 
 	# convert all angles to radians
 	index_elev_azim[:,1:3] *= (2 * np.pi / 360);
+	return index_elev_azim
+
+
+def get_cartesian_samplepoints():
+	'''
+	Return an array A of shape (187, 3) such that:
+	A[i, :] = [x, y, z] of the point at (zero-based) index i in the HRTF database
+	'''
 
 	# convert sphere coordinates (r=1, elev, azim) to cartesian (x,y,z) with ||(x,y,z)|| = 1
 	# {{{
@@ -288,3 +346,8 @@ def get_cartesian_samplepoints():
 	# }}}
 
 	return cartesian_points;
+
+# this is a global variable so that it doesn't have to parse the python
+# list to an np.ndarray every time it's used
+# sorry for hack
+index_elev_azim = get_index_elev_azim()
