@@ -111,6 +111,48 @@ def delay_signal_float(in_sig: np.ndarray, samples: float, downsample = 1) -> np
 		delayed_after = delayed_after[np.arange(0, s, downsample)]
 
 	return (1-a) * delayed_before + a * delayed_after
+
+def interpolate_2d(irs_and_delaydiffs, elev, azim):
+	'''
+	First attempt at 2d HRTF interpolation
+
+	The idea is to use the already existing 1d interpolation to find the
+	interpolated HRTFs for the given azimuth, at the next lower and higher
+	elevations in the database. these two HRTFs can then be interpolated
+	again to represent an elevation angle between the two adjacent ones.
+
+	concerns/thoughts/ideas:
+	- we need a way to get the final, interpolated delay difference from
+	  the two calls of the 1d interpolation function and use them for the
+	  final interpolation along the azim direction. this probably involves
+	  a new, slightly different version of the function (although the old
+	  one could easily be redefined in terms of the new one to avoid
+	  redundancy).
+	- this will be (at least) 3x slower than 1d interpolation, so using
+	  this function incentivizes also implementing the make_signal_move
+	  function in a more efficient manner, as outlined in a comment there.
+	'''
+	available_elevs = [-45,-30,-15,0,15,30,45,60,75,90]
+	lower_elev = max([e for e in available_elevs if e < elev])
+	higher_elev = min([e for e in available_elevs if e > elev])
+
+	'''
+	TODO maybe fall back to 2d interpolation if elev is in available_elevs?
+	Although this would only be a null set among all possible (elev, azim)
+	pairs, it is imaginable that lots of sound sources will have elev=0.
+	'''
+
+	'''
+	TODO write the rest of the function :)
+	- interpolate in one dimension to get the HRTFs for (elev, azim) =
+	  (lower_elev, azim) or (higher_elev, azim)
+	- somehow get the delay differences
+	- interpolate between the two previously calculated HRTFs to get the
+	  final HRTF for (elev, azim)
+	'''
+
+
+
 # }}}
 
 # Application of interpolated HRTF's
