@@ -257,8 +257,16 @@ function diff = delaydifference(signal_a, signal_b, upsampling)
 	diff = peak_index - (signallength - 1);
 endfunction
 
-% finds the peak of the parabola fitting the three points: f(x) = ax^2 + bx + c
-% (a,b,c) determined by f([-1 0 1]) = vec
+% finds the three coefficients (a,b,c) of the parabola f(x) = ax^2 + bx + c
+% which fits the three points contained in vec, such that:
+% f(-1) = vec(1)
+% f(0) = vec(2)
+% f(+1) = vec(3)
+% and then returns the position of the peak relative to the middle value
+% vec(2)
+% CAUTION: if the 3 points all lie on a line we will divide by 0, but if
+% the middle point is a strict maximum this will not happen (and the three
+% points all having the same value is unlikely enough to ignore)
 function peak = parabolic_interpolation(vec)
 	% check the input
 	assert (length(vec) == 3);
