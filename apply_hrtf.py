@@ -155,8 +155,8 @@ def make_signal_move(in_signal, chunksize: int, index_function, irs_and_delaydif
 	simply interpolated linearly between the two actual interpolations for
 	each sub-chunk. The chunks would have to be small enough that the delay
 	difference between the two adjacent interpolated impulse response (at
-	the start of one chunk and the next one) is much smaller than one
-	sample.
+	the start of one chunk and the next one) is much smaller (todo: how
+	much?) than one sample.
 
 	For example, we could use chunks of 400 and sub-chunks of 10 samples
 	(400 samples = 9 ms, during which a sound source would have to travel
@@ -164,8 +164,8 @@ def make_signal_move(in_signal, chunksize: int, index_function, irs_and_delaydif
 	difference more than 1 sample)
 
 	(TODO: actually calculate this and maybe implement a dynamic algorithm
-	based on the difference quotient of index_function)
-
+	based on the difference quotient of index_function, assuming that
+	index_function is sufficiently smooth)
 	'''
 
 	for i in range(0, in_length, chunksize):
