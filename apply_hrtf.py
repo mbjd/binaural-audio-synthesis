@@ -5,6 +5,7 @@
 # Input etc.
 # {{{
 import time
+import sys
 
 import numpy as np
 import scipy as sp
@@ -15,7 +16,7 @@ import scipy.signal
 
 import matplotlib.pyplot as pl
 
-import sys
+import sphere
 
 # This should be a matlab 6 compatible file (save -6 <file> <vars>
 # in octave) as created by upsample_irs.m
@@ -43,11 +44,12 @@ def load_irs_and_delaydiffs(filename = 'irs_and_delaydiffs_compensated_6.mat', s
 # (1-alpha) before + alpha after, with before and after referring to indices
 # in the irs_and_delaydiffs database
 # irs_and_delaydiffs: class as returned by load_irs_and_delaydiffs
-# before, after: integers
+# before, after: integers (indices for the HRTF database)
 # alpha: float between 0 and 1
+# In addition to the impulse responess, this returns the delay differences of the left and right channel,
+# i.e. the delay difference between the 'before' HRTF and the interpolated HRTF.
 # TODO maybe use one array with an extra dimension for left and right channels?
-# this is the same as delay_compensated_interpolation_efficient in the octave version
-def delay_compensated_interpolation(irs_and_delaydiffs, before: int, after: int, alpha: float):
+def delay_compensated_interpolation_with_delaydiff(irs_and_delaydiffs, before: int, after: int, alpha: float):
 	upsampling = irs_and_delaydiffs.upsampling
 
 	# get the impulse responses of the 'before' sampling point
@@ -73,7 +75,15 @@ def delay_compensated_interpolation(irs_and_delaydiffs, before: int, after: int,
 	l_interpolated = delay_signal_float(l_interpolated_nodelay, delay_l_interpolated, upsampling);
 	r_interpolated = delay_signal_float(r_interpolated_nodelay, delay_r_interpolated, upsampling);
 
-	return np.concatenate([l_interpolated, r_interpolated]).reshape([2, l_interpolated.size])
+	# TODO find a better way to stick two arrays together
+	out_irs = np.concatenate([l_interpolated, r_interpolated]).reshape([2, l_interpolated.size])
+
+	return (delay_l_interpolated / upsampling, delay_r_interpolated / upsampling, out_irs)
+
+def delay_compensated_interpolation(irs_and_delaydiffs, before: int, after: int, alpha: float):
+	(delay_l, delay_r, out_irs) = delay_compensated_interpolation_with_delaydiff(irs_and_delaydiffs, before, after, alpha)
+	return out_irs
+
 
 # Same but with different interface
 def delay_compensated_interpolation_easy(irs_and_delaydiffs, continuous_index: float):
@@ -116,6 +126,11 @@ def delay_signal_float(in_sig: np.ndarray, samples: float, downsample = 1) -> np
 
 def interpolate_2d(irs_and_delaydiffs, elev, azim):
 	'''
+	elev, azim in radians
+	irs_and_delaydiffs as returned by load_irs_and_delaydiffs
+	'''
+
+	'''
 	First attempt at 2d HRTF interpolation
 
 	The idea is to use the already existing 1d interpolation to find the
@@ -137,6 +152,10 @@ def interpolate_2d(irs_and_delaydiffs, elev, azim):
 	available_elevs = [-45,-30,-15,0,15,30,45,60,75,90]
 	lower_elev = max([e for e in available_elevs if e < elev])
 	higher_elev = min([e for e in available_elevs if e > elev])
+
+	# get the adjacent indices and interpolation parameters
+	(top_left, top_alpha, top_right) = sphere.azim_to_interpolation_params(higher_elev, azim)
+	(bot_left, bot_alpha, bot_right) = sphere.azim_to_interpolation_params(lower_elev, azim)
 
 	'''
 	TODO maybe fall back to 2d interpolation if elev is in available_elevs?

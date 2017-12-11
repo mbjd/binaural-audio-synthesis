@@ -120,10 +120,7 @@ def azim_to_interpolation_params(elev, azim):
 
 	return (before, a, after)
 
-
-
-
-
+# {{{
 def get_index_elev_azim():
 	# differences to ./recherche.ircam.fr/indices:
 	# - zero-based indexing (every index is one less)
@@ -320,7 +317,7 @@ def get_index_elev_azim():
 	# convert all angles to radians
 	index_elev_azim[:,1:3] *= (2 * np.pi / 360);
 	return index_elev_azim
-
+# }}}
 
 def get_cartesian_samplepoints():
 	'''
