@@ -160,10 +160,63 @@ def interpolate_2d(irs_and_delaydiffs, elev, azim):
 	available_elevs = [-45,-30,-15,0,15,30,45,60,75,90]
 	lower_elev = max([e for e in available_elevs if e < elev])
 	higher_elev = min([e for e in available_elevs if e > elev])
+	assert higher_elev > lower_elev, 'something\'s messed up'
 
 	# get the adjacent indices and interpolation parameters
-	(top_left, top_alpha, top_right) = sphere.azim_to_interpolation_params(higher_elev, azim)
-	(bot_left, bot_alpha, bot_right) = sphere.azim_to_interpolation_params(lower_elev, azim)
+	(top_before, top_alpha, top_after) = sphere.azim_to_interpolation_params(higher_elev, azim)
+	(bot_before, bot_alpha, bot_after) = sphere.azim_to_interpolation_params(lower_elev, azim)
+
+	# calculate the 1d interpolated HRTFs at the next higher and lower elevations
+	(delay_l_top, delay_r_top, hrtf_top) = delay_compensated_interpolation_with_delaydiff(irs_and_delaydiffs, top_before, top_after, top_alpha, return_upsampled=True)
+	(delay_l_bot, delay_r_bot, hrtf_bot) = delay_compensated_interpolation_with_delaydiff(irs_and_delaydiffs, bot_before, bot_after, bot_alpha, return_upsampled=True)
+
+	'''
+	Interpolate vertically between the two horizontal interpolations
+	what follows is a version of delay_compensated_interpolation modified
+	so heavily that I don't feel bad about writing it inline
+
+	using a 'mesh rule' for the delay difference function, we can derive:
+	dd(top_interpolated, bot_interpolated) =
+				top_alpha * dd(top_after, top_before)
+				+ dd(top_before, bottom_left)
+				+ bot_alpha * dd(bottom_left, bottom_right)
+	'''
+
+	upsampling = irs_and_delaydiffs.upsampling
+
+	delay_l = upsampling * (top_alpha * irs_and_delaydiffs.diffs_left[top_after, top_before]
+	+ irs_and_delaydiffs.diffs_left[top_before, bot_before]
+	+ bot_alpha * irs_and_delaydiffs.diffs_left[bot_before, bot_after])
+
+	delay_r = upsampling * (top_alpha * irs_and_delaydiffs.diffs_right[top_after, top_after]
+	+ irs_and_delaydiffs.diffs_right[top_after, bot_after]
+	+ bot_alpha * irs_and_delaydiffs.diffs_right[bot_after, bot_after])
+
+	# l_top = hrtf_top[0,:]
+	# r_top = hrtf_top[1,:]
+
+	l_bottom_nodelay = delay_signal_float(hrtf_bot[0,:], -delay_l)
+	r_bottom_nodelay = delay_signal_float(hrtf_bot[1,:], -delay_r)
+
+	# vertical interpolation parameter a ∈ [0,1]
+	# a=0 -> only take bottom HRTF
+	# a=1 -> only take top HRTF
+	a = (elev - lower_elev) / (higher_elev - lower_elev)
+	assert 0 <= a <= 1, 'interpolation parameter somehow takes invalid value'
+
+	l_interpolated_nodelay = (1-a) * l_bottom_nodelay + a * hrtf_top[0,:]
+	r_interpolated_nodelay = (1-a) * r_bottom_nodelay + a * hrtf_top[1,:]
+
+	# interpolate the delays
+	delay_l_interpolated = a * delay_l
+	delay_r_interpolated = a * delay_r
+
+	# add back delays & downsample again
+	l_interpolated = delay_signal_float(l_interpolated_nodelay, delay_l_interpolated, downsample=upsampling)
+	r_interpolated = delay_signal_float(r_interpolated_nodelay, delay_r_interpolated, downsample=upsampling)
+
+	out_irs = np.concatenate([l_interpolated, r_interpolated]).reshape([2, l_interpolated.size])
+	return out_irs
 
 	'''
 	TODO maybe fall back to 2d interpolation if elev is in available_elevs?
@@ -174,12 +227,11 @@ def interpolate_2d(irs_and_delaydiffs, elev, azim):
 	'''
 	TODO write the rest of the function :)
 	- interpolate in one dimension to get the HRTFs for (elev, azim) =
-	  (lower_elev, azim) or (higher_elev, azim)
-	- somehow get the delay differences
+	  (lower_elev, azim) or (higher_elev, azim) - DONE
+	- somehow get the delay differences - DONE
 	- interpolate between the two previously calculated HRTFs to get the
 	  final HRTF for (elev, azim)
 	'''
-
 
 
 # }}}
