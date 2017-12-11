@@ -53,8 +53,8 @@ def delay_compensated_interpolation_with_delaydiff(irs_and_delaydiffs, before: i
 	upsampling = irs_and_delaydiffs.upsampling
 
 	# get the impulse responses of the 'before' sampling point
-	l_before = irs_and_delaydiffs.irs_left[before,:]
-	r_before = irs_and_delaydiffs.irs_right[before,:]
+	# l_before = irs_and_delaydiffs.irs_left[before,:]
+	# r_before = irs_and_delaydiffs.irs_right[before,:]
 
 	# get the delay differences for both channels, convert them back to the upsampled domain
 	delay_l = upsampling * irs_and_delaydiffs.diffs_left[before, after]
@@ -65,8 +65,8 @@ def delay_compensated_interpolation_with_delaydiff(irs_and_delaydiffs, before: i
 	r_after_nodelay = delay_signal_float(irs_and_delaydiffs.irs_right[after,:], -delay_r)
 
 	# interpolate the delay-free impulse responses
-	l_interpolated_nodelay = (1-alpha) * l_before + alpha * l_after_nodelay
-	r_interpolated_nodelay = (1-alpha) * r_before + alpha * r_after_nodelay
+	l_interpolated_nodelay = (1-alpha) * irs_and_delaydiffs.irs_left[before,:] + alpha * l_after_nodelay
+	r_interpolated_nodelay = (1-alpha) * irs_and_delaydiffs.irs_right[before,:] + alpha * r_after_nodelay
 
 	# interpolate delays and add them back to the signals
 	delay_l_interpolated = alpha * delay_l
