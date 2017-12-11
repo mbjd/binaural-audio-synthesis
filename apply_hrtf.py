@@ -79,8 +79,7 @@ def delay_compensated_interpolation_with_delaydiff(irs_and_delaydiffs, before: i
 		l_interpolated = delay_signal_float(l_interpolated_nodelay, delay_l_interpolated, upsampling);
 		r_interpolated = delay_signal_float(r_interpolated_nodelay, delay_r_interpolated, upsampling);
 
-	# TODO find a better way to stick two arrays together
-	out_irs = np.concatenate([l_interpolated, r_interpolated]).reshape([2, l_interpolated.size])
+	out_irs = np.vstack([l_interpolated, r_interpolated])
 
 	return (delay_l_interpolated / upsampling, delay_r_interpolated / upsampling, out_irs)
 
@@ -215,7 +214,7 @@ def interpolate_2d(irs_and_delaydiffs, elev, azim):
 	l_interpolated = delay_signal_float(l_interpolated_nodelay, delay_l_interpolated, downsample=upsampling)
 	r_interpolated = delay_signal_float(r_interpolated_nodelay, delay_r_interpolated, downsample=upsampling)
 
-	out_irs = np.concatenate([l_interpolated, r_interpolated]).reshape([2, l_interpolated.size])
+	out_irs = np.vstack([l_interpolated, r_interpolated])
 	return out_irs
 
 	'''
@@ -307,7 +306,7 @@ def make_signal_move(in_signal, chunksize: int, index_function, irs_and_delaydif
 			print(' {:.1f}%           '.format(100 * i / in_length), end='\r')
 	print(' 100.0%      ')
 
-	out_sig = np.concatenate([out_l, out_r]).reshape([2, out_l.size]).astype(np.float32).T
+	out_sig = np.vstack([out_l, out_r]).astype(np.float32).T
 	return out_sig / np.max([out_sig.max(), -(out_sig.min())])
 # }}}
 
