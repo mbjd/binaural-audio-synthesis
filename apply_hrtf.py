@@ -305,7 +305,7 @@ def make_signal_move(in_signal, chunksize: int, index_function, irs_and_delaydif
 
 		if ((i // chunksize) % 64 == 0):
 			print(' {:.1f}%           '.format(100 * i / in_length), end='\r')
-	print(' 100.0%')
+	print(' 100.0%      ')
 
 	out_sig = np.concatenate([out_l, out_r]).reshape([2, out_l.size]).astype(np.float32).T
 	return out_sig / np.max([out_sig.max(), -(out_sig.min())])
@@ -316,7 +316,7 @@ def main():
 	try:
 		input_filename = sys.argv[1]
 	except IndexError:
-		printf('$1 empty - should be input file', file=sys.stderr)
+		print('argv[1] empty - should be input file', file=sys.stderr)
 		sys.exit(1)
 
 	fs, y = wavfile.read(input_filename)
