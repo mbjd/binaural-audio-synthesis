@@ -49,7 +49,7 @@ def load_irs_and_delaydiffs(filename = 'irs_and_delaydiffs_compensated_6.mat', s
 # In addition to the impulse responess, this returns the delay differences of the left and right channel,
 # i.e. the delay difference between the 'before' HRTF and the interpolated HRTF.
 # TODO maybe use one array with an extra dimension for left and right channels?
-def delay_compensated_interpolation_with_delaydiff(irs_and_delaydiffs, before: int, after: int, alpha: float):
+def delay_compensated_interpolation_with_delaydiff(irs_and_delaydiffs, before: int, after: int, alpha: float, return_upsampled = False):
 	upsampling = irs_and_delaydiffs.upsampling
 
 	# get the impulse responses of the 'before' sampling point
@@ -72,8 +72,12 @@ def delay_compensated_interpolation_with_delaydiff(irs_and_delaydiffs, before: i
 	delay_l_interpolated = alpha * delay_l
 	delay_r_interpolated = alpha * delay_r
 
-	l_interpolated = delay_signal_float(l_interpolated_nodelay, delay_l_interpolated, upsampling);
-	r_interpolated = delay_signal_float(r_interpolated_nodelay, delay_r_interpolated, upsampling);
+	if return_upsampled:
+		l_interpolated = delay_signal_float(l_interpolated_nodelay, delay_l_interpolated, 1);
+		r_interpolated = delay_signal_float(r_interpolated_nodelay, delay_r_interpolated, 1);
+	else:
+		l_interpolated = delay_signal_float(l_interpolated_nodelay, delay_l_interpolated, upsampling);
+		r_interpolated = delay_signal_float(r_interpolated_nodelay, delay_r_interpolated, upsampling);
 
 	# TODO find a better way to stick two arrays together
 	out_irs = np.concatenate([l_interpolated, r_interpolated]).reshape([2, l_interpolated.size])
