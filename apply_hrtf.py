@@ -128,6 +128,10 @@ def delay_signal_float(in_sig: np.ndarray, samples: float, downsample = 1) -> np
 
 	return (1-a) * delayed_before + a * delayed_after
 
+def interpolate_2d_deg(irs_and_delaydiffs, elev, azim):
+	deg2rad = (2*np.pi) / 360
+	return interpolate_2d(irs_and_delaydiffs, deg2rad * elev, deg2rad * azim)
+
 def interpolate_2d(irs_and_delaydiffs, elev, azim):
 	'''
 	elev, azim in radians
