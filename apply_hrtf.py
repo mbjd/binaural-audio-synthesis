@@ -15,6 +15,8 @@ import scipy.signal
 
 import matplotlib.pyplot as pl
 
+import sys
+
 # This should be a matlab 6 compatible file (save -6 <file> <vars>
 # in octave) as created by upsample_irs.m
 # samples_to_keep
@@ -233,40 +235,48 @@ def make_signal_move(in_signal, chunksize: int, index_function, irs_and_delaydif
 def main():
 	start = time.time()
 	try:
-		input_file = sys.argv[1]
+		input_filename = sys.argv[1]
 	except IndexError:
 		printf('$1 empty - should be input file', file=sys.stderr)
 		sys.exit(1)
 
-	input_filename = '{}.wav'.format(input_file)
 	fs, y = wavfile.read(input_filename)
 	y = y.astype(np.float32) / y.max()
 
-	samples_to_keep = 150;
+	samples_to_keep = 120;
 	T=2 # Period of signal moving around head
 	chunksize = 50
+	stereo_mode = False
 
 	irs_and_delaydiffs = load_irs_and_delaydiffs('irs_and_delaydiffs_compensated_6.mat', samples_to_keep = samples_to_keep)
 
-	if len(y.shape) == 1:
+	if len(y.shape) == 2:
+		if stereo_mode:
+			print('The file \'{}\' is in stereo - enabling stereo mode!!! (this will take twice as long)'.format(input_filename))
+			f_left = lambda t: (t % (T*fs)) * (24 / (T*fs)) + 73
+			f_right = lambda t: (t % (T*fs)) * (24 / (T*fs)) + 73 + 12 # 12 indices = half a circle
+
+			# Calculate the contributions from the left and right channels separately
+			out_left = make_signal_move(y[:,0], chunksize, f_left, irs_and_delaydiffs)
+			out_right = make_signal_move(y[:,1], chunksize, f_right, irs_and_delaydiffs)
+
+			# Average them (both are already stereo)
+			out_sig = 0.5 * (out_left + out_right)
+		else:
+			print('The file \'{}\' is in stereo, but stereo mode is off - converting to mono...'.format(input_filename))
+			y_mono = 0.5 * (y[:,0] + y[:,1])
+			out_sig = make_signal_move(y_mono, chunksize, lambda t: (t % (T*fs)) * (24 / (T*fs)) + 73, irs_and_delaydiffs).astype(np.float32);
+	elif len(y.shape) == 1:
 		# we have a mono signal
 		out_sig = make_signal_move(y, chunksize, lambda t: (t % (T*fs)) * (24 / (T*fs)) + 73, irs_and_delaydiffs).astype(np.float32);
-	elif len(y.shape) == 2:
-		print('The file \'{}\' is in stereo - enabling stereo mode!!! (this will take twice as long)'.format(input_filename))
-		f_left = lambda t: (t % (T*fs)) * (24 / (T*fs)) + 73
-		f_right = lambda t: (t % (T*fs)) * (24 / (T*fs)) + 73 + 12 # 12 indices = half a circle
-
-		# Calculate the contributions from the left and right channels separately
-		out_left = make_signal_move(y[:,0], chunksize, f_left, irs_and_delaydiffs)
-		out_right = make_signal_move(y[:,1], chunksize, f_right, irs_and_delaydiffs)
-
-		# Average them (both are already stereo)
-		out_sig = 0.5 * (out_left + out_right)
 	else:
 		printf('wrong input shape: {}'.format(y.shape), file=sys.stderr)
 		sys.exit(1)
 
-	out_filename = 'python-{}-{}-{}.wav'.format(input_file, chunksize, samples_to_keep);
+	out_filename = 'python-{}-{}-{}.wav'.format(
+			input_filename.replace('.wav',''),
+			chunksize,
+			samples_to_keep);
 	wavfile.write(out_filename, fs, out_sig.astype(np.float32))
 
 	elapsed_time = time.time() - start;
