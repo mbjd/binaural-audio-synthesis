@@ -311,6 +311,40 @@ def make_signal_move(in_signal, chunksize: int, index_function, irs_and_delaydif
 	return out_sig / np.max([out_sig.max(), -(out_sig.min())])
 # }}}
 
+# Display / Debugging / etc {{{
+def imshow_interpolation(irs_and_delaydiffs, start, stop, steps, disp_upsample=4):
+	'''
+	steps: how many samples to calculate
+	start, stop: tuples of (elev, azim)
+	'''
+
+	# get the sampling points
+	azims = np.linspace(start[0], stop[0], steps)
+	elevs = np.linspace(start[1], stop[1], steps)
+
+	ir_length = int(0.5 + irs_and_delaydiffs.irs_left.shape[1] / irs_and_delaydiffs.upsampling)
+	irs_l = np.zeros([steps, ir_length * disp_upsample])
+	irs_r = np.zeros([steps, ir_length * disp_upsample])
+
+	# fill the matrix, each line is one HRTF
+	for i in range(steps):
+		print(' {:.2f}%                  '.format(100 * i/steps), end='\r')
+		irs = interpolate_2d_deg(irs_and_delaydiffs, azims[i], elevs[i])
+		irs = scipy.signal.resample(irs, disp_upsample * ir_length, axis=1)
+		irs_l[i,:] = irs[0,:]
+		irs_r[i,:] = irs[1,:]
+	print(' 100%       ')
+
+	pl.subplot(121)
+	pl.imshow(irs_l)
+	pl.title('left HRTFs')
+	pl.subplot(122)
+	pl.imshow(irs_r)
+	pl.title('right HRTFs')
+	pl.show()
+
+# }}}
+
 def main():
 	start = time.time()
 	try:
