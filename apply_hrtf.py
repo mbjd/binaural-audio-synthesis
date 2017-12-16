@@ -210,14 +210,15 @@ def interpolate_2d(irs_and_delaydiffs, elev, azim):
 	r_interpolated_nodelay = (1-a) * r_bottom_nodelay + a * hrtf_top[1,:]
 
 	# interpolate the delays
-	delay_l_interpolated = a * delay_l
-	delay_r_interpolated = a * delay_r
+	delay_l_interpolated = (1-a) * delay_l
+	delay_r_interpolated = (1-a) * delay_r
 
 	# add back delays & downsample again
 	l_interpolated = delay_signal_float(l_interpolated_nodelay, delay_l_interpolated, downsample=upsampling)
 	r_interpolated = delay_signal_float(r_interpolated_nodelay, delay_r_interpolated, downsample=upsampling)
 
 	out_irs = np.vstack([l_interpolated, r_interpolated])
+
 	return out_irs
 
 	'''
