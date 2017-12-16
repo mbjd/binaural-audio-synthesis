@@ -436,6 +436,7 @@ def imshow_interpolation(irs_and_delaydiffs, start, stop, steps, disp_upsample=4
 # }}}
 
 def main():
+
 	start = time.time()
 	try:
 		input_filename = sys.argv[1]
@@ -453,25 +454,15 @@ def main():
 
 	irs_and_delaydiffs = load_irs_and_delaydiffs('irs_and_delaydiffs_compensated_6.mat', samples_to_keep = samples_to_keep)
 
-	if len(y.shape) == 2:
-		if stereo_mode:
-			print('The file \'{}\' is in stereo - enabling stereo mode!!! (this will take twice as long)'.format(input_filename))
-			f_left = lambda t: (t % (T*fs)) * (24 / (T*fs)) + 73
-			f_right = lambda t: (t % (T*fs)) * (24 / (T*fs)) + 73 + 12 # 12 indices = half a circle
+	A = 1
+	k = 2*np.pi / (T*fs)
+	circle_front = lambda t: (A*np.sin(k*t), A*np.cos(k*t))
+	circle_horizontal = lambda t: (0, (k*t) % (2*np.pi))
+	passing = lambda t: (0, np.arctan(5*k*(t-5*44100)))
 
-			# Calculate the contributions from the left and right channels separately
-			out_left = make_signal_move(y[:,0], chunksize, f_left, irs_and_delaydiffs)
-			out_right = make_signal_move(y[:,1], chunksize, f_right, irs_and_delaydiffs)
-
-			# Average them (both are already stereo)
-			out_sig = 0.5 * (out_left + out_right)
-		else:
-			print('The file \'{}\' is in stereo, but stereo mode is off - converting to mono...'.format(input_filename))
-			y_mono = 0.5 * (y[:,0] + y[:,1])
-			out_sig = make_signal_move(y_mono, chunksize, lambda t: (t % (T*fs)) * (24 / (T*fs)) + 73, irs_and_delaydiffs).astype(np.float32);
-	elif len(y.shape) == 1:
+	if len(y.shape) == 1:
 		# we have a mono signal
-		out_sig = make_signal_move(y, chunksize, lambda t: (t % (T*fs)) * (24 / (T*fs)) + 73, irs_and_delaydiffs).astype(np.float32);
+		out_sig = make_signal_move_2d(y, 64, 16, passing, irs_and_delaydiffs).astype(np.float32)
 	else:
 		printf('wrong input shape: {}'.format(y.shape), file=sys.stderr)
 		sys.exit(1)
