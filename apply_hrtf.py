@@ -183,13 +183,13 @@ def interpolate_2d(irs_and_delaydiffs, elev, azim):
 
 	upsampling = irs_and_delaydiffs.upsampling
 
-	delay_l = upsampling * (top_alpha * irs_and_delaydiffs.diffs_left[top_after, top_before]
+	delay_l = upsampling * (-delay_l_top
 	+ irs_and_delaydiffs.diffs_left[top_before, bot_before]
-	+ bot_alpha * irs_and_delaydiffs.diffs_left[bot_before, bot_after])
+	+ delay_l_bot)
 
-	delay_r = upsampling * (top_alpha * irs_and_delaydiffs.diffs_right[top_after, top_after]
-	+ irs_and_delaydiffs.diffs_right[top_after, bot_after]
-	+ bot_alpha * irs_and_delaydiffs.diffs_right[bot_after, bot_after])
+	delay_r = upsampling * (-delay_r_top
+	+ irs_and_delaydiffs.diffs_right[top_before, bot_before]
+	+ delay_r_bot)
 
 	# l_top = hrtf_top[0,:]
 	# r_top = hrtf_top[1,:]
