@@ -315,10 +315,10 @@ def make_signal_move(in_signal, chunksize: int, index_function, irs_and_delaydif
 # }}}
 
 # Display / Debugging / etc {{{
-def imshow_interpolation(irs_and_delaydiffs, start, stop, steps, disp_upsample=4):
+def imshow_interpolation(irs_and_delaydiffs, start, stop, steps, disp_upsample=4, new=True):
 	'''
 	steps: how many samples to calculate
-	start, stop: tuples of (elev, azim)
+	start, stop: tuples of (elev, azim) (degrees)
 	'''
 
 	# get the sampling points
@@ -331,8 +331,11 @@ def imshow_interpolation(irs_and_delaydiffs, start, stop, steps, disp_upsample=4
 
 	# fill the matrix, each line is one HRTF
 	for i in range(steps):
-		print(' {:.2f}%                  '.format(100 * i/steps), end='\r')
-		irs = interpolate_2d_deg(irs_and_delaydiffs, azims[i], elevs[i])
+		print(' {:.2f}%                  '.format(100 * i/steps), end='\n')
+		if new:
+			irs = interpolate_2d_deg(irs_and_delaydiffs, azims[i], elevs[i])
+		else:
+			irs = delay_compensated_interpolation_easy(irs_and_delaydiffs, 73 + (24/360)*azims[i])
 		irs = scipy.signal.resample(irs, disp_upsample * ir_length, axis=1)
 		irs_l[i,:] = irs[0,:]
 		irs_r[i,:] = irs[1,:]
