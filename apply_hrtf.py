@@ -320,7 +320,82 @@ def make_signal_move(in_signal, chunksize: int, index_function, irs_and_delaydif
 	print(' 100.0%      ')
 
 	out_sig = np.vstack([out_l, out_r]).astype(np.float32).T
-	return out_sig / np.max([out_sig.max(), -(out_sig.min())])
+
+	m = np.max([out_sig.max(), -(out_sig.min())])
+	if m > 1:
+		out_sig /= m
+
+	return out_sig
+
+
+def make_signal_move_2d(in_signal, chunksize: int, subchunksize: int, elev_azim_function, irs_and_delaydiffs):
+	'''
+	in_signal: input signal, ndarray of shape (1, N) = (N,)
+	chunksize: Number of samples for which to use the same HRTF interpolation
+	           (TODO: make this depend on the derivative of elev_azim_function)
+	index_function: function of time (in samples) specifying returning a radian (elev, azim) tuple
+	irs_and_delaydiffs: class returned by load_irs_and_delaydiffs
+	'''
+
+	assert len(in_signal.shape) == 1, 'only mono signals for now'
+	ir_length = int(0.5 + irs_and_delaydiffs.irs_left.shape[1] / irs_and_delaydiffs.upsampling)
+
+	in_length = int(0.5 + np.ceil(in_signal.size / chunksize) * chunksize)
+	in_signal = np.pad(in_signal, (0, in_length - in_signal.size), mode='constant')
+	assert in_signal.size == in_length, 'input has been padded with wrong nubmer of zeros'
+
+	# output length = next bigger integer multiple of chunk size + ir length in worst case
+	out_length = int(0.5 + np.ceil(in_signal.size / chunksize) * chunksize + (ir_length - 1))
+	assert out_length == in_signal.size + ir_length - 1, 'wrong output length'
+
+	out_l = np.zeros([out_length])
+	out_r = np.zeros([out_length])
+
+	# create the chunks here to avoid reallocating them every time
+	# probably pretty pointless since the interpolation function
+	# reallocates the upsampled IR's anyway
+	in_chunk = np.zeros([subchunksize])
+	out_chunk_left = np.zeros([subchunksize + ir_length - 1])
+	out_chunk_right = np.zeros([subchunksize + ir_length - 1])
+	out_indices = np.zeros([subchunksize + ir_length - 1], dtype=np.uint64)
+
+	ir_interpolated = np.zeros([2,ir_length])
+	ir_startchunk = np.zeros([2,ir_length])
+	ir_endchunk = np.zeros([2,ir_length])
+
+	ir_endchunk = interpolate_2d(irs_and_delaydiffs, *(elev_azim_function(0)))
+	for i in range(0, in_length, chunksize):
+
+		# swap the support functions at the ends of the chunk
+		ir_startchunk[:,:] = ir_endchunk[:,:]
+		ir_endchunk[:,:] = interpolate_2d(irs_and_delaydiffs, *(elev_azim_function(i+chunksize)))
+
+		for j in range(0, chunksize, subchunksize):
+			in_chunk[:] = in_signal[i+j:i+j+subchunksize];
+
+			# linear interpolation between the two support functions
+			alpha = j / chunksize
+			ir_interpolated[:,:] = (1-alpha) * ir_startchunk[:,:] + alpha * ir_endchunk[:,:]
+
+			out_chunk_left[:]  = sp.signal.convolve(in_chunk, ir_interpolated[0,:])
+			out_chunk_right[:] = sp.signal.convolve(in_chunk, ir_interpolated[1,:])
+
+			out_indices[:] = np.arange(i+j, i+j + subchunksize + ir_length - 1)
+
+			out_l[out_indices] += out_chunk_left;
+			out_r[out_indices] += out_chunk_right;
+
+
+		print(' {:.1f}%           '.format(100 * i / in_length), end='\r')
+	print(' 100.0%      ')
+
+	out_sig = np.vstack([out_l, out_r]).astype(np.float32).T
+
+	m = np.max([out_sig.max(), -(out_sig.min())])
+	if m > 1:
+		out_sig /= m
+
+	return out_sig
 # }}}
 
 # Display / Debugging / etc {{{
@@ -340,7 +415,7 @@ def imshow_interpolation(irs_and_delaydiffs, start, stop, steps, disp_upsample=4
 
 	# fill the matrix, each line is one HRTF
 	for i in range(steps):
-		print(' {:.2f}%                  '.format(100 * i/steps), end='\n')
+		print(' {:.2f}%                  '.format(100 * i/steps), end='\r')
 		if new:
 			irs = interpolate_2d_deg(irs_and_delaydiffs, azims[i], elevs[i])
 		else:
