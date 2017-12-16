@@ -200,7 +200,10 @@ def interpolate_2d(irs_and_delaydiffs, elev, azim):
 	# vertical interpolation parameter a ∈ [0,1]
 	# a=0 -> only take bottom HRTF
 	# a=1 -> only take top HRTF
-	a = (elev - lower_elev) / (higher_elev - lower_elev)
+	if higher_elev > lower_elev:
+		a = (elev - lower_elev) / (higher_elev - lower_elev)
+	else:
+		a = 0
 	assert 0 <= a <= 1, 'interpolation parameter somehow takes invalid value'
 
 	l_interpolated_nodelay = (1-a) * l_bottom_nodelay + a * hrtf_top[0,:]
