@@ -156,10 +156,10 @@ def interpolate_2d(irs_and_delaydiffs, elev, azim):
 	  this function incentivizes also implementing the make_signal_move
 	  function in a more efficient manner, as outlined in a comment there.
 	'''
-	available_elevs = [-45,-30,-15,0,15,30,45,60,75,90]
-	lower_elev = max([e for e in available_elevs if e < elev])
-	higher_elev = min([e for e in available_elevs if e > elev])
-	assert higher_elev > lower_elev, 'something\'s messed up'
+	available_elevs = np.deg2rad(np.array([-45,-30,-15,0,15,30,45,60,75,90]))
+	lower_elev = max([e for e in available_elevs if e <= elev])
+	higher_elev = min([e for e in available_elevs if e >= elev])
+	assert higher_elev >= lower_elev, 'something\'s messed up'
 
 	# get the adjacent indices and interpolation parameters
 	(top_before, top_alpha, top_after) = sphere.azim_to_interpolation_params(higher_elev, azim)
