@@ -157,8 +157,17 @@ def interpolate_2d(irs_and_delaydiffs, elev, azim):
 	  function in a more efficient manner, as outlined in a comment there.
 	'''
 	available_elevs = np.deg2rad(np.array([-45,-30,-15,0,15,30,45,60,75,90]))
-	lower_elev = max([e for e in available_elevs if e <= elev])
-	higher_elev = min([e for e in available_elevs if e >= elev])
+
+	try:
+		lower_elev = max([e for e in available_elevs if e <= elev])
+	except ValueError:
+		lower_elev = -0.78539816339744828 # = deg2rad(-45)
+
+	try:
+		higher_elev = min([e for e in available_elevs if e >= elev])
+	except ValueError:
+		higher_elev = 1.5707963267948966 # = deg2rad(+90)
+
 	assert higher_elev >= lower_elev, 'something\'s messed up'
 
 	# get the adjacent indices and interpolation parameters
