@@ -491,6 +491,7 @@ def main():
 	k = 2*np.pi / (T*fs)
 	circle_front = lambda t: (A*np.sin(k*t), A*np.cos(k*t))
 	circle_horizontal = lambda t: (0, (k*t) % (2*np.pi))
+	halfcircle_vertical = lambda t: (np.sign(np.sin(k*t)), (k*t) % (2*np.pi))
 	passing = lambda t: (0, np.arctan(5*k*(t-5*44100)))
 
 	if len(y.shape) == 1:
@@ -500,9 +501,10 @@ def main():
 		printf('wrong input shape: {}'.format(y.shape), file=sys.stderr)
 		sys.exit(1)
 
-	out_filename = 'python-{}-{}-{}.wav'.format(
+	# chunk size, subchunk size, length of impulse response
+	out_filename = '{}-c{}-s{}-l{}.wav'.format(
 			input_filename.replace('.wav',''),
-			chunksize,
+			chunksize, subchunksize,
 			samples_to_keep);
 	wavfile.write(out_filename, fs, out_sig.astype(np.float32))
 
