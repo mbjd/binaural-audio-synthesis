@@ -15,6 +15,7 @@ import scipy.io.wavfile as wavfile
 import scipy.signal
 
 import matplotlib.pyplot as pl
+from mpl_toolkits.mplot3d import Axes3D
 
 import sphere
 
@@ -425,12 +426,37 @@ def imshow_interpolation(irs_and_delaydiffs, start, stop, steps, disp_upsample=4
 		irs_r[i,:] = irs[1,:]
 	print(' 100%       ')
 
-	pl.subplot(121)
-	pl.imshow(irs_l)
-	pl.title('left HRTFs')
-	pl.subplot(122)
-	pl.imshow(irs_r)
-	pl.title('right HRTFs')
+
+	fig, (ax1, ax2) = pl.subplots(1,2, sharex=True, sharey=True)
+
+	ax1.imshow(irs_l, aspect='auto', extent=(0, ir_length, steps, 0))
+	ax1.set_title('left HRTFs')
+	ax1.set_xlabel('Samples')
+	ax1.set_ylabel('Steps')
+
+	ax2.imshow(irs_r, aspect='auto', extent=(0, ir_length, steps, 0))
+	ax2.set_title('right HRTFs')
+	ax2.set_xlabel('Samples')
+	ax2.set_ylabel('Steps')
+
+	pl.show()
+
+	fig = pl.figure()
+	ax = fig.add_subplot(111, projection='3d')
+
+	cart_samplepoints = sphere.get_cartesian_samplepoints()
+	(xs, ys, zs) = (cart_samplepoints[:,0], cart_samplepoints[:,1], cart_samplepoints[:,2])
+	ax.scatter(xs, ys, zs, c='blue')
+
+	# column 0 = x coordinate
+	xs = -np.sin(np.deg2rad(azims)) * np.cos(np.deg2rad(elevs));
+	# column 1 = y coordinate
+	ys = np.cos(np.deg2rad(azims)) * np.cos(np.deg2rad(elevs));
+	# column 2 = z coordinate
+	zs = np.sin(np.deg2rad(elevs))
+
+	ax.scatter(xs, ys, zs, c='red')
+
 	pl.show()
 
 # }}}
