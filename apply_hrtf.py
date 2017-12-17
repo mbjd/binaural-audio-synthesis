@@ -406,8 +406,8 @@ def imshow_interpolation(irs_and_delaydiffs, start, stop, steps, disp_upsample=4
 	'''
 
 	# get the sampling points
-	azims = np.linspace(start[0], stop[0], steps)
-	elevs = np.linspace(start[1], stop[1], steps)
+	elevs = np.linspace(start[0], stop[0], steps)
+	azims = np.linspace(start[1], stop[1], steps)
 
 	ir_length = int(0.5 + irs_and_delaydiffs.irs_left.shape[1] / irs_and_delaydiffs.upsampling)
 	irs_l = np.zeros([steps, ir_length * disp_upsample])
@@ -417,7 +417,7 @@ def imshow_interpolation(irs_and_delaydiffs, start, stop, steps, disp_upsample=4
 	for i in range(steps):
 		print(' {:.2f}%                  '.format(100 * i/steps), end='\r')
 		if new:
-			irs = interpolate_2d_deg(irs_and_delaydiffs, azims[i], elevs[i])
+			irs = interpolate_2d_deg(irs_and_delaydiffs, elevs[i], azims[i])
 		else:
 			irs = delay_compensated_interpolation_easy(irs_and_delaydiffs, 73 + (24/360)*azims[i])
 		irs = scipy.signal.resample(irs, disp_upsample * ir_length, axis=1)
