@@ -466,10 +466,9 @@ def imshow_interpolation(irs_and_delaydiffs, start, stop, steps, disp_upsample=4
 
 def main():
 
-	iad = load_irs_and_delaydiffs('irs_and_delaydiffs_compensated_6.mat', samples_to_keep = 100)
-
-	imshow_interpolation(iad, (-45, 0), (90, 10 * 360), steps=2000, disp_upsample=8)
-	return
+	# iad = load_irs_and_delaydiffs('irs_and_delaydiffs_compensated_6.mat', samples_to_keep = 100)
+	# imshow_interpolation(iad, (-45, 0), (90, 5 * 360), steps=2000, disp_upsample=8)
+	# return
 
 
 	start = time.time()
@@ -486,7 +485,7 @@ def main():
 	T=2 # Period of signal moving around head
 	stereo_mode = False
 	chunksize = 64
-	subchunksize = 16
+	subchunksize = 8
 
 	irs_and_delaydiffs = load_irs_and_delaydiffs('irs_and_delaydiffs_compensated_6.mat', samples_to_keep = samples_to_keep)
 
@@ -497,9 +496,14 @@ def main():
 	halfcircle_vertical = lambda t: (np.sign(np.sin(k*t)), (k*t) % (2*np.pi))
 	passing = lambda t: (0, np.arctan(5*k*(t-5*44100)))
 
+	# in seconds
+	length = 30
+	turns = 15
+	spiral = lambda t: ((-np.pi/4) + (3*np.pi/4) * (t/(fs*length)), 2*np.pi*t*turns/(fs*length))
+
 	if len(y.shape) == 1:
 		# we have a mono signal
-		out_sig = make_signal_move_2d(y, 64, 16, passing, irs_and_delaydiffs).astype(np.float32)
+		out_sig = make_signal_move_2d(y, chunksize, subchunksize, spiral, irs_and_delaydiffs).astype(np.float32)
 	else:
 		printf('wrong input shape: {}'.format(y.shape), file=sys.stderr)
 		sys.exit(1)
