@@ -463,6 +463,12 @@ def imshow_interpolation(irs_and_delaydiffs, start, stop, steps, disp_upsample=4
 
 def main():
 
+	iad = load_irs_and_delaydiffs('irs_and_delaydiffs_compensated_6.mat', samples_to_keep = 100)
+
+	imshow_interpolation(iad, (-45, 0), (90, 10 * 360), steps=2000, disp_upsample=8)
+	return
+
+
 	start = time.time()
 	try:
 		input_filename = sys.argv[1]
@@ -475,8 +481,9 @@ def main():
 
 	samples_to_keep = 120;
 	T=2 # Period of signal moving around head
-	chunksize = 50
 	stereo_mode = False
+	chunksize = 64
+	subchunksize = 16
 
 	irs_and_delaydiffs = load_irs_and_delaydiffs('irs_and_delaydiffs_compensated_6.mat', samples_to_keep = samples_to_keep)
 
