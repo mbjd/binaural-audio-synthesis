@@ -427,19 +427,6 @@ def imshow_interpolation(irs_and_delaydiffs, start, stop, steps, disp_upsample=4
 	print(' 100%       ')
 
 
-	fig, (ax1, ax2) = pl.subplots(1,2, sharex=True, sharey=True)
-
-	ax1.imshow(irs_l, aspect='auto', extent=(0, ir_length, steps, 0))
-	ax1.set_title('left HRTFs')
-	ax1.set_xlabel('Samples')
-	ax1.set_ylabel('Steps')
-
-	ax2.imshow(irs_r, aspect='auto', extent=(0, ir_length, steps, 0))
-	ax2.set_title('right HRTFs')
-	ax2.set_xlabel('Samples')
-	ax2.set_ylabel('Steps')
-
-	pl.show()
 
 	fig = pl.figure()
 	ax = fig.add_subplot(111, projection='3d')
@@ -458,6 +445,22 @@ def imshow_interpolation(irs_and_delaydiffs, start, stop, steps, disp_upsample=4
 	ax.scatter(xs, ys, zs, c='red')
 
 	pl.show()
+
+
+	fig, (ax1, ax2) = pl.subplots(1,2, sharex=True, sharey=True)
+
+	ax1.imshow(irs_l, aspect='auto', extent=(0, ir_length, steps, 0))
+	ax1.set_title('left HRTFs')
+	ax1.set_xlabel('Samples')
+	ax1.set_ylabel('Steps')
+
+	ax2.imshow(irs_r, aspect='auto', extent=(0, ir_length, steps, 0))
+	ax2.set_title('right HRTFs')
+	ax2.set_xlabel('Samples')
+	ax2.set_ylabel('Steps')
+
+	pl.show()
+
 
 # }}}
 
