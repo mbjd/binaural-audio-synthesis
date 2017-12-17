@@ -509,7 +509,7 @@ def main():
 	wavfile.write(out_filename, fs, out_sig.astype(np.float32))
 
 	elapsed_time = time.time() - start;
-	print("wrote to '{}' - took {:.2f} secs - {:.2f} faster than real time".format(
+	print("wrote to '{}' - took {:.2f} secs - {:.2f}x as fast as real time".format(
 		out_filename,
 		elapsed_time,
 		(y.size / fs) / (elapsed_time)))
