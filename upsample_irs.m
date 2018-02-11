@@ -58,12 +58,13 @@ function diff = delaydifference(signal_a, signal_b, upsampling)
 	assert (length(signal_a) == length(signal_b))
 	signallength = length(signal_a);
 
-	% autocorrelate the signal and upsample
-	autocorr_upsampled = resample(fftconv(fliplr(flipud(signal_a)), signal_b), upsampling, 1);
+	% cross correlate the signal and upsample
+	% cross correlation = convolution but without the time reversal that makes convolution commutative
+	crosscorr_upsampled = resample(fftconv(fliplr(flipud(signal_a)), signal_b), upsampling, 1);
 
 	% find the peak
-	[value, peak_index] = max(autocorr_upsampled);
-	peak_index += parabolic_interpolation(autocorr_upsampled(peak_index-1:peak_index+1)) - 1;
+	[value, peak_index] = max(crosscorr_upsampled);
+	peak_index += parabolic_interpolation(crosscorr_upsampled(peak_index-1:peak_index+1)) - 1;
 
 	% convert back to non-upsampled samples
 	peak_index /= upsampling;
