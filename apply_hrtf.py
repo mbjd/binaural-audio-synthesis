@@ -2,64 +2,6 @@
 
 # Python rewrite of apply_hrtf.m
 
-'''
-
-This is the main file of my (Balduin Dettling, dbalduin (at)
-student.ethz.ch) binaural audio generation project. The goal is to take an
-audio file, along with a function that maps time to a point on the
-unit sphere, and make another audio file that sounds as if the sound source
-was moving around the listener according to the given function.
-
-For this, I need measurements of HRTFs from different directions (1) (head
-related transfer functions - the impulse responses of the human ears and
-head). Luckily, that has already been done several times - in this project
-I used a database of HRTF measurements spaced about 15 degrees.
-
-The main challenge of the project then became interpolation, that is
-creating a HRTF for an angle for which we don't have a measurement. The
-simplest thing to do would be linearly interpolating between adjacent
-HRTFs, which didn't work well because the difference in signal delay
-sometimes causes unwanted constructive or destructive interference.
-
-Another, slightly more advanced approach, which is now used in the project,
-is what we call "delay compensated interpolation" (2). We first determine the
-delay difference (3) between two signals between which we want to
-interpolate. Then we remove the delay in the second signal (which is just a
-shift in time), so that the signals have the same delay and delay
-difference 0. We then linearly interpolate between the two signals,
-according to an interpolation parameter alpha in [0,1]. To this
-interpolated signal we add back an interpolated delay, which again is just
-the linear interpolation between the delay differences of the two adjacent
-measured impulse response.
-
-Using this interpolation method, I then constructed a 2d interpolation
-function, interpolate_2d, which is explained thoroughly in a comment in the
-function itself.
-
-Now we have a method to get a decent HRTF for any point on the sphere
-(well, except if the elevation angle is below -45º, because the database
-doesn't have measurements there). The rest of the challenge consists in
-applying these HRTFs to a signal with a moving sound source. I experimented
-with several methods, and have arrived at the abomination that is
-make_signal_move_2d. It is also explained in a comment within the function
-itself.
-
-(1): If you want to do a slightly simpler project, consider doing away with
-HRTFs and just try to recreate the amplitude and delay differences between
-the ears from all possible angles.
-
-(2): Implementation in delay_compensated_interpolation_with_delaydiff
-
-(3): The delay difference of two signals is, loosely speaking, the distance
-between the positions of the main peaks in the respective HRTF. The actual
-definition is its implementation (Salamon would be proud of me), which is
-the function delaydifference in ./upsample_irs.m, where we cross-correlate
-the two impulse responses and basically return the position of the peak of
-that signal in comparison to the middle of it (where the peak would be if
-the two signals were the same)
-
-'''
-
 # Input etc.
 # {{{
 import time
@@ -77,13 +19,22 @@ from mpl_toolkits.mplot3d import Axes3D
 
 import sphere
 
-# This should be a matlab 6 compatible file (save -6 <file> <vars>
-# in octave, I haven't tested it in matlab itself) as created by upsample_irs.m
-# samples_to_keep: length of the impulse response, the rest is truncated away
+
 def load_irs_and_delaydiffs(filename = 'irs_and_delaydiffs_compensated_6.mat', samples_to_keep = 512):
+
+	'''
+	filename: This should be a matlab 6 compatible file (save -6 <file> <vars> in
+	octave, I haven't tested it in matlab itself) as created by upsample_irs
+	in upsample_irs.m
+
+	samples_to_keep: length of the impulse response, the rest is truncated
+	away (in non-upsampled samples)
+	'''
+
 	m = sp.io.loadmat(filename)['irs_and_delaydiffs']
 
 	class irs_and_delaydiffs:
+		# I got these indices by trial and error
 		upsampling = int(m[0][0]['upsampling'][0][0])
 
 		diffs_left = m[0][0]['diffs_left']
@@ -99,16 +50,28 @@ def load_irs_and_delaydiffs(filename = 'irs_and_delaydiffs_compensated_6.mat', s
 # HRTF interpolation
 # {{{
 
-# Returns the delay compensated interpolated version of a signal equivalent to:
-# (1-alpha) * before + alpha * after, with before and after referring to indices
-# in the irs_and_delaydiffs database
-# irs_and_delaydiffs: class as returned by load_irs_and_delaydiffs
-# before, after: integers (indices for the HRTF database)
-# alpha: float between 0 and 1
-# In addition to the impulse responess, this returns the delay differences of the left and right channel,
-# i.e. the delay difference between the 'before' HRTF and the interpolated HRTF.
-# TODO maybe use one array with an extra dimension for left and right channels?
 def delay_compensated_interpolation_with_delaydiff(irs_and_delaydiffs, before: int, after: int, alpha: float, return_upsampled = False):
+
+	'''
+	Returns the delay compensated interpolation between two signals:
+	a=0 => 'before' signal is returned
+	a=1 => 'before' signal is returned
+	a ∈ (0,1) => Interpolated signal is returned
+
+	irs_and_delaydiffs: class as returned by load_irs_and_delaydiffs
+
+	before, after: HRTF database indices of the two signals
+
+	alpha: Interpolation parameter ∈ [0,1]
+
+	return_upsampled: bool, if True the signal won't be downsampled before
+	returning, which is needed in interpolate_2d.
+
+	In addition to the impulse respones, this returns the delay differences of the left and right channel,
+	i.e. the delay difference between the 'before' HRTF and the interpolated HRTF.
+	TODO maybe use one array with an extra dimension for left and right channels?
+	'''
+
 	upsampling = irs_and_delaydiffs.upsampling
 
 	# get the impulse responses of the 'before' sampling point
@@ -143,12 +106,13 @@ def delay_compensated_interpolation_with_delaydiff(irs_and_delaydiffs, before: i
 	return (delay_l_interpolated / upsampling, delay_r_interpolated / upsampling, out_irs)
 
 def delay_compensated_interpolation(irs_and_delaydiffs, before: int, after: int, alpha: float):
+	# Same as above but discard the delay differences
 	(delay_l, delay_r, out_irs) = delay_compensated_interpolation_with_delaydiff(irs_and_delaydiffs, before, after, alpha)
 	return out_irs
 
 
-# Same but with different interface
 def delay_compensated_interpolation_easy(irs_and_delaydiffs, continuous_index: float):
+	# Same but with different interface
 	before = int(np.floor(continuous_index))
 	after = int(np.ceil(continuous_index))
 	alpha = continuous_index - before
@@ -160,13 +124,27 @@ def delay_compensated_interpolation_easy(irs_and_delaydiffs, continuous_index: f
 
 	return delay_compensated_interpolation(irs_and_delaydiffs, before, after, alpha)
 
-# Delay a signal by a non-integer amount of samples by interpolating
-# linearly between the two signals delayed by the adjacent integers
-# downsample: int specifying how much to downsample the resulting signal
-# terminology: before and after are the sample points adjacent to the desired
-#              interpolation of hrtf's
-#              left and right refer to the left and right ears/impulse responses/channels
 def delay_signal_float(in_sig: np.ndarray, samples: float, downsample = 1) -> np.ndarray:
+	'''
+	Delay a signal by a non-integer amount of samples by interpolating
+	linearly between the two signals delayed by the adjacent integers
+
+	in_sig: Signal to delay
+
+	samples: Amount of samples to delay the signal
+
+	downsample: int specifying how much to downsample the resulting signal
+	(Caution, the downsampling just consists of decimation, you need to
+	make sure yourself that there will not be significant aliasing, i.e.
+	that in_sig is bandlimited to its nyquist frequency divided by
+	downsample)
+
+	~~~ terminology ~~~
+	before and after are the sample points adjacent to the desired
+	interpolation of HRTFs
+	left and right refer to the left and right ears/impulse responses/channels
+	'''
+
 	# two adjacent integers & linear interpolation parameter
 	before = int(np.floor(samples))
 	after  = int(np.ceil(samples))
@@ -192,17 +170,19 @@ def interpolate_2d_deg(irs_and_delaydiffs, elev, azim):
 
 def interpolate_2d(irs_and_delaydiffs, elev, azim):
 	'''
-	elev, azim in radians
-	irs_and_delaydiffs as returned by load_irs_and_delaydiffs
-	'''
+	elev, azim: Sound source position in radians, elev ∈ [-pi/4, pi/2], azim ∈ [0,2pi]
+	irs_and_delaydiffs: as returned by load_irs_and_delaydiffs
 
-	'''
+	returns: the HRTF which (hopefully) describes what it sounds like if a
+	signal is played from the direction specified by (elev, azim)
+
 	First attempt at 2d HRTF interpolation
 
 	The idea is to use the already existing 1d interpolation to find the
 	interpolated HRTFs for the given azimuth, at the next lower and higher
 	elevations in the database. these two HRTFs can then be interpolated
-	again to represent an elevation angle between the two adjacent ones.
+	again along the vertical line between (lower_elev, azim) and
+	(higher_elev, azim).
 
 	concerns/thoughts/ideas:
 	- we need a way to get the final, interpolated delay difference from
@@ -214,6 +194,7 @@ def interpolate_2d(irs_and_delaydiffs, elev, azim):
 	- this will be (at least) 3x slower than 1d interpolation, so using
 	  this function incentivizes also implementing the make_signal_move
 	  function in a more efficient manner, as outlined in a comment there.
+	  (update - this is mostly done, see make_signal_move_2d)
 	'''
 	available_elevs = np.deg2rad(np.array([-45,-30,-15,0,15,30,45,60,75,90]))
 
@@ -234,6 +215,7 @@ def interpolate_2d(irs_and_delaydiffs, elev, azim):
 	(bot_before, bot_alpha, bot_after) = sphere.azim_to_interpolation_params(lower_elev, azim)
 
 	# calculate the 1d interpolated HRTFs at the next higher and lower elevations
+	# sorry for code worm
 	(delay_l_top, delay_r_top, hrtf_top) = delay_compensated_interpolation_with_delaydiff(irs_and_delaydiffs, top_before, top_after, top_alpha, return_upsampled=True)
 	(delay_l_bot, delay_r_bot, hrtf_bot) = delay_compensated_interpolation_with_delaydiff(irs_and_delaydiffs, bot_before, bot_after, bot_alpha, return_upsampled=True)
 
@@ -250,10 +232,12 @@ def interpolate_2d(irs_and_delaydiffs, elev, azim):
 
 	* which is that the sum of delay differences in a loop should be zero,
 	e.g. dd(a, b) + dd(b, c) + dd(c, a) = 0. I haven't proven this, but it
-	trivially holds if the signals shifted delta functions, and it seems to
-	work well enough for the signals we're interested in.
-	Also btw: dd(a, b) = -dd(b, a) (proof left as exercise for reader)
+	trivially holds if the signals are shifted delta functions, and it
+	seems to work well enough for the signals we're interested in (after
+	all they are somewhat similar to shifted delta functions).
 
+	Also btw: dd(a, b) = -dd(b, a), because switching the signals causes a
+	time reversal in the cross correlation between the signals
 
 	'''
 
@@ -267,19 +251,18 @@ def interpolate_2d(irs_and_delaydiffs, elev, azim):
 	+ irs_and_delaydiffs.diffs_right[top_before, bot_before]
 	+ delay_r_bot)
 
-	# l_top = hrtf_top[0,:]
-	# r_top = hrtf_top[1,:]
-
 	l_bottom_nodelay = delay_signal_float(hrtf_bot[0,:], -delay_l)
 	r_bottom_nodelay = delay_signal_float(hrtf_bot[1,:], -delay_r)
 
 	# vertical interpolation parameter a ∈ [0,1]
 	# a=0 -> only take bottom HRTF
 	# a=1 -> only take top HRTF
+	# a ∈ (0,1) -> interpolate
 	if higher_elev > lower_elev:
 		a = (elev - lower_elev) / (higher_elev - lower_elev)
 	else:
 		a = 0
+		print('wtf is happening here?')
 	assert 0 <= a <= 1, 'interpolation parameter somehow takes invalid value'
 
 	l_interpolated_nodelay = (1-a) * l_bottom_nodelay + a * hrtf_top[0,:]
@@ -303,16 +286,6 @@ def interpolate_2d(irs_and_delaydiffs, elev, azim):
 	pairs, it is imaginable that lots of sound sources will have elev=0.
 	'''
 
-	'''
-	TODO write the rest of the function :)
-	- interpolate in one dimension to get the HRTFs for (elev, azim) =
-	  (lower_elev, azim) or (higher_elev, azim) - DONE
-	- somehow get the delay differences - DONE
-	- interpolate between the two previously calculated HRTFs to get the
-	  final HRTF for (elev, azim)
-	'''
-
-
 # }}}
 
 # Application of interpolated HRTF's
@@ -323,8 +296,11 @@ def make_signal_move(in_signal, chunksize: int, index_function, irs_and_delaydif
 	in_signal: input signal, ndarray of shape (1, N) (TODO: (2,N) for stereo signals)
 	chunksize: Number of samples for which to use the same HRTF interpolation
 	           (TODO: make this depend on the derivative of index_function)
-	index_function: function of time (in samples) specifying the index of the HRTF to use
+	index_function: function of time (in samples) specifying the index (in
+	           the database) of the HRTF to use
 	irs_and_delaydiffs: class returned by load_irs_and_delaydiffs
+
+	(this function is old, use make_signal_move_2d)
 	'''
 
 	assert len(in_signal.shape) == 1, 'only mono signals for now'
@@ -348,19 +324,22 @@ def make_signal_move(in_signal, chunksize: int, index_function, irs_and_delaydif
 	out_chunk_right = np.zeros([chunksize + ir_length - 1])
 	out_indices = np.zeros([chunksize + ir_length - 1], dtype=np.uint64)
 
-
+	# Iterate over chunks
 	for i in range(0, in_length, chunksize):
 		in_chunk = in_signal[i:i+chunksize];
+		# Get the interpolated HRTF
 		ir_interpolated = delay_compensated_interpolation_easy(irs_and_delaydiffs, index_function(i))
 
-		out_indices[:] = np.arange(i, i + chunksize + ir_length - 1)
-
+		# Apply it to the chunk
 		out_chunk_left[:]  = sp.signal.convolve(in_chunk, ir_interpolated[0,:])
 		out_chunk_right[:] = sp.signal.convolve(in_chunk, ir_interpolated[1,:])
 
+		# Add the result to the output signal
+		out_indices[:] = np.arange(i, i + chunksize + ir_length - 1)
 		out_l[out_indices] += out_chunk_left;
 		out_r[out_indices] += out_chunk_right;
 
+		# Print progress every now and then
 		if ((i // chunksize) % 64 == 0):
 			print(' {:.1f}%           '.format(100 * i / in_length), end='\r')
 	print(' 100.0%      ')
@@ -379,7 +358,7 @@ def make_signal_move_2d(in_signal, chunksize: int, subchunksize: int, elev_azim_
 	This function makes the audio signal in_signal sound as if the sound
 	source was moving according to elev_azim_function.
 
-	First of all, the obvious thing to do would be:
+	First of all, the obvious thing to do would be (this is basically make_signal_move):
 
 		divide the input signal into chunks of size K, with each chunk starting at sample j = n*k
 		initialize the output signal to zeros, with a length slightly longer than the input signal*
@@ -406,18 +385,26 @@ def make_signal_move_2d(in_signal, chunksize: int, subchunksize: int, elev_azim_
 	source)
 
 	in_signal: input signal, ndarray of shape (1, N) = (N,)
-	chunksize: Number of samples for which to use the same HRTF interpolation
-	           (TODO: make this depend on the derivative of elev_azim_function)
-	elev_azim_function: function of time (in samples) returning a radian (elev, azim) tuple
+
+	chunksize, subchunksize: see paragraph above, make sure chunksize is an
+	integer multiple of subchunksize
+
+	elev_azim_function: function of time (in samples) returning a radian
+	(elev, azim) tuple specifying the location of the sound source
+
 	irs_and_delaydiffs: class returned by load_irs_and_delaydiffs
 	'''
 
 	assert len(in_signal.shape) == 1, 'only mono signals for now'
 	ir_length = int(0.5 + irs_and_delaydiffs.irs_left.shape[1] / irs_and_delaydiffs.upsampling)
 
+	chunks_per_subchunk = chunksize / subchunksize
+	assert chunks_per_subchunk == np.floor(chunks_per_subchunk), 'subchunksize does not divide chunksize evenly'
+
+	# append zeroes to the end of the input signal so its length is a multiple chunksize
 	in_length = int(0.5 + np.ceil(in_signal.size / chunksize) * chunksize)
 	in_signal = np.pad(in_signal, (0, in_length - in_signal.size), mode='constant')
-	assert in_signal.size == in_length, 'input has been padded with wrong nubmer of zeros'
+	# assert in_signal.size == in_length, 'input has been padded with wrong nubmer of zeros'
 
 	# output length = next bigger integer multiple of chunk size + ir length in worst case
 	out_length = int(0.5 + np.ceil(in_signal.size / chunksize) * chunksize + (ir_length - 1))
@@ -440,18 +427,19 @@ def make_signal_move_2d(in_signal, chunksize: int, subchunksize: int, elev_azim_
 	ir_interpolated = np.zeros([2,ir_length]) #
 
 	ir_endchunk = interpolate_2d(irs_and_delaydiffs, *(elev_azim_function(0)))
+	# iterate over chunks
 	for i in range(0, in_length, chunksize):
 
 		# swap the support functions at the ends of the chunk
 		ir_startchunk[:,:] = ir_endchunk[:,:]
 		ir_endchunk[:,:] = interpolate_2d(irs_and_delaydiffs, *(elev_azim_function(i+chunksize)))
 
+		# iterate over subchunks
 		for j in range(0, chunksize, subchunksize):
 			in_subchunk[:] = in_signal[i+j:i+j+subchunksize];
 
-			# linear interpolation between the two support functions, which are the 2d-interpolated
-			# HRTFs at the start and end of the chunk
-			alpha = j / chunksize # interpolation parameter in [0,1)
+			# linear interpolation between the two HRTFs at the start and end of the chunk
+			alpha = j / chunksize # interpolation parameter ∈ [0,1)
 			ir_interpolated[:,:] = (1-alpha) * ir_startchunk[:,:] + alpha * ir_endchunk[:,:]
 
 			out_subchunk_left[:]  = sp.signal.convolve(in_subchunk, ir_interpolated[0,:])
@@ -470,6 +458,7 @@ def make_signal_move_2d(in_signal, chunksize: int, subchunksize: int, elev_azim_
 
 	out_sig = np.vstack([out_l, out_r]).astype(np.float32).T
 
+	# normalize the signal to a max. absolute value of 1
 	m = np.max([out_sig.max(), -(out_sig.min())])
 	if m > 1:
 		out_sig /= m
@@ -480,8 +469,21 @@ def make_signal_move_2d(in_signal, chunksize: int, subchunksize: int, elev_azim_
 # Display / Debugging / etc {{{
 def imshow_interpolation(irs_and_delaydiffs, start, stop, steps, disp_upsample=4, new=True, func=None):
 	'''
+	irs_and_delaydiffs: as returned by load_irs_and_delaydiffs
+
 	steps: how many samples to calculate
+
 	start, stop: tuples of (elev, azim) (degrees)
+
+	disp_upsample: Factor by which the interpolated HRTFs are upsampled so that the image looks nicer
+
+	new: if True, use interpolate_2d, if false, use the old delay_compensated_interpolation
+	(note that the old function only does elev=0, see code)
+
+	func: if not None, this is a function of time in samples that specifies
+	at which points to evaluate the respective interpolation function. This
+	will override the values of start and stop (see code)
+
 	'''
 
 	if func:
@@ -561,6 +563,8 @@ def main():
 
 	- get a filename from the first command line argument
 	- read audio
+	- use the make_signal_move_2d function
+	- write the result to a file
 	'''
 
 	try:
@@ -598,6 +602,8 @@ def main():
 	irs_and_delaydiffs = load_irs_and_delaydiffs('irs_and_delaydiffs_compensated_6.mat', samples_to_keep = samples_to_keep)
 
 	if len(y.shape) == 2 and y.shape[1] == 2:
+		# we got a stereo signal - wat do?
+
 		if stereo_mode:
 			# disclaimer - this is old, may not work anymore {{{
 			# apply the (constant) left/right HRTFs to the left and right channels, maybe this will make it sound more realistic?

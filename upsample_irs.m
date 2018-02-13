@@ -4,11 +4,14 @@ load recherche.ircam.fr/COMPENSATED/MAT/HRIR/IRC_1032_C_HRIR.mat
 % makes further calculations faster by upsampling the impulse responses in advance
 % and precalculating the delays
 
-% return a struct A such that:
+% return (and save to cwd) a struct A such that:
 % A.diffs_left(i,j) = delaydifference(left(i), left(j))
 % A.diffs_right(i,j) = delaydifference(right(i), right(j))
 % A.irs_{left,right}(i,:) =  HRTF impulse response at index i, upsampled <A.upsampling> times
-% Note that the delay differences refer to non-upsampled samples
+
+% Note that the delay differences refer to non-upsampled samples, so if you want to
+% shift a signal using the upsampled version, you first need to multiply the time shift by
+% the upsampling factor, A.upsampling
 function irs_and_delaydiffs = upsample_irs(l_eq_hrir_S, r_eq_hrir_S, upsampling)
 	diffs_left = zeros(187);
 	diffs_right = zeros(187);
@@ -78,8 +81,7 @@ endfunction
 % f(-1) = vec(1)
 % f(0) = vec(2)
 % f(+1) = vec(3)
-% and then returns the position of the peak relative to the middle value
-% vec(2)
+% and then returns the position of the peak of this parabola, i.e. the x that maximises f(x)
 % CAUTION: if the 3 points all lie on a line we will divide by 0, but if
 % the middle point is a strict maximum this will not happen (and the three
 % points all having the same value is unlikely enough to ignore)
@@ -89,7 +91,7 @@ function peak = parabolic_interpolation(vec)
 	[_, index] = max(vec);
 	assert (index == 2);
 
-	% proof left to the reader
+	% derivation left to the reader
 	c = vec(2);
 	a = 0.5 * (vec(1) + vec(3) - 2 * c);
 	b = 0.5 * (vec(3) - vec(1));
