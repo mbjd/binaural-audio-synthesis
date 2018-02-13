@@ -261,8 +261,8 @@ def interpolate_2d(irs_and_delaydiffs, elev, azim):
 	if higher_elev > lower_elev:
 		a = (elev - lower_elev) / (higher_elev - lower_elev)
 	else:
+		assert higher_elev == lower_elev
 		a = 0
-		print('wtf is happening here?')
 	assert 0 <= a <= 1, 'interpolation parameter somehow takes invalid value'
 
 	l_interpolated_nodelay = (1-a) * l_bottom_nodelay + a * hrtf_top[0,:]
