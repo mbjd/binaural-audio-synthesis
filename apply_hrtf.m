@@ -1,4 +1,9 @@
 % experiments with applying a HRTF to a (mono) audio signal
+
+% DISCLAIMER
+% This script has been abandoned, and newer developments have been
+% made in the python version apply_hrtf.py.
+
 % TODO
 % update delay_compensated_interpolation_efficient and delay_signal_int to
 % be able to delay a signal by a float by linearly interpolating between the

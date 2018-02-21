@@ -77,7 +77,7 @@ amplitude and delay differences between the ears from all possible angles.
 (3): The delay difference of two signals is, loosely speaking, the distance
 between the positions of the main peaks in the respective HRTF. The actual
 definition is its implementation (Salamon would be proud of me), which is
-the function `delaydifference` in `./upsample_irs.m,` where we
+the function `delaydifference` in `./upsample_irs.m`, where we
 cross-correlate the two impulse responses and return the position of the
 peak of that signal in comparison to the middle of it (where the peak would
 be if the two signals were the same).
